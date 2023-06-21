@@ -15,6 +15,8 @@ ENV \
     S3PROXY_IDENTITY="local-identity" \
     S3PROXY_CREDENTIAL="local-credential" \
     S3PROXY_VIRTUALHOST="" \
+    S3PROXY_KEYSTORE_PATH="keystore.jks" \
+    S3PROXY_KEYSTORE_PASSWORD="password" \
     S3PROXY_CORS_ALLOW_ALL="false" \
     S3PROXY_CORS_ALLOW_ORIGINS="" \
     S3PROXY_CORS_ALLOW_METHODS="" \
@@ -34,5 +36,5 @@ ENV \
     JCLOUDS_KEYSTONE_PROJECT_DOMAIN_NAME="" \
     JCLOUDS_FILESYSTEM_BASEDIR="/data"
 
-EXPOSE 80
+EXPOSE 80 443
 ENTRYPOINT ["/opt/s3proxy/run-docker-container.sh"]
