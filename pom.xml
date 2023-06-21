@@ -75,7 +75,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-enforcer-plugin</artifactId>
-        <version>3.1.0</version>
+        <version>3.2.1</version>
         <executions>
           <execution>
             <id>enforce-maven</id>
@@ -100,17 +100,17 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-install-plugin</artifactId>
-        <version>3.0.1</version>
+        <version>3.1.1</version>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-deploy-plugin</artifactId>
-        <version>3.0.0</version>
+        <version>3.1.0</version>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-checkstyle-plugin</artifactId>
-        <version>3.1.2</version>
+        <version>3.2.1</version>
         <executions>
           <execution>
             <id>check</id>
@@ -139,12 +139,12 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-resources-plugin</artifactId>
-        <version>3.2.0</version>
+        <version>3.3.0</version>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
-        <version>3.10.1</version>
+        <version>3.11.0</version>
         <configuration>
           <source>${java.version}</source>
           <target>${java.version}</target>
@@ -153,27 +153,13 @@
           <compilerArgs>
             <arg>-Xlint</arg>
             <arg>-XDcompilePolicy=simple</arg>
-            <arg>-Xplugin:ErrorProne
-                 -Xep:CanIgnoreReturnValueSuggester:OFF
-                 -Xep:DefaultCharset:OFF
-                 -Xep:HidingField:OFF
-                 -Xep:JavaUtilDate:OFF
-                 -Xep:ProtectedMembersInFinalClass:OFF
-            </arg>
           </compilerArgs>
-          <annotationProcessorPaths>
-            <path>
-              <groupId>com.google.errorprone</groupId>
-              <artifactId>error_prone_core</artifactId>
-              <version>2.15.0</version>
-            </path>
-          </annotationProcessorPaths>
         </configuration>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-jar-plugin</artifactId>
-        <version>3.2.2</version>
+        <version>3.3.0</version>
         <configuration>
           <archive>
             <manifest>
@@ -186,7 +172,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-javadoc-plugin</artifactId>
-        <version>3.4.0</version>
+        <version>3.5.0</version>
         <executions>
           <execution>
             <id>attach-javadocs</id>
@@ -199,7 +185,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
-        <version>3.3.0</version>
+        <version>3.4.1</version>
         <executions>
           <execution>
             <phase>package</phase>
@@ -237,7 +223,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-assembly-plugin</artifactId>
-        <version>3.4.1</version>
+        <version>3.5.0</version>
         <configuration>
           <descriptors>
             <descriptor>src/main/assembly/jar-with-dependencies.xml</descriptor>
@@ -294,7 +280,7 @@
           </dependency>
         </dependencies>
         <configuration>
-          <parallel>all</parallel>
+          <parallel>classes</parallel>
           <threadCount>1</threadCount>
           <argLine>-Xmx512m</argLine>
           <redirectTestOutputToFile>true</redirectTestOutputToFile>
@@ -312,14 +298,7 @@
       <plugin>
         <groupId>com.github.spotbugs</groupId>
         <artifactId>spotbugs-maven-plugin</artifactId>
-        <version>4.7.1.1</version>
-        <dependencies>
-          <dependency>
-            <groupId>com.github.spotbugs</groupId>
-            <artifactId>spotbugs</artifactId>
-            <version>4.7.1</version>
-          </dependency>
-        </dependencies>
+        <version>4.7.3.0</version>
         <configuration>
           <effort>Max</effort>
           <omitVisitors>CrossSiteScripting,DefaultEncodingDetector,FindNullDeref</omitVisitors>
@@ -382,10 +361,10 @@
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <java.version>11</java.version>
-    <jclouds.version>2.5.0</jclouds.version>
-    <slf4j.version>1.7.36</slf4j.version>
+    <jclouds.version>2.6.0-SNAPSHOT</jclouds.version>
+    <slf4j.version>2.0.7</slf4j.version>
     <shade.prefix>${project.groupId}.shaded</shade.prefix>
-    <surefire.version>2.22.2</surefire.version>
+    <surefire.version>3.0.0</surefire.version>
   </properties>
 
   <repositories>
@@ -419,7 +398,7 @@
     <dependency>
       <groupId>ch.qos.logback</groupId>
       <artifactId>logback-classic</artifactId>
-      <version>1.2.11</version>
+      <version>1.4.7</version>
     </dependency>
     <dependency>
       <groupId>javax.xml.bind</groupId>
@@ -459,7 +438,7 @@
     <dependency>
       <groupId>commons-fileupload</groupId>
       <artifactId>commons-fileupload</artifactId>
-      <version>1.4</version>
+      <version>1.5</version>
     </dependency>
     <dependency>
       <groupId>commons-codec</groupId>
@@ -486,12 +465,12 @@
       <artifactId>assertj-core</artifactId>
       <scope>test</scope>
       <!-- we need to use the same version as in jclouds because we pull in their tests -->
-      <version>1.7.1</version>
+      <version>3.24.2</version>
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-servlet</artifactId>
-      <version>11.0.11</version>
+      <version>11.0.15</version>
     </dependency>
     <dependency>
       <groupId>org.slf4j</groupId>
@@ -529,7 +508,7 @@
     <dependency>
       <groupId>org.testng</groupId>
       <artifactId>testng</artifactId>
-      <version>6.8.21</version>
+      <version>7.5</version>
       <scope>test</scope>
     </dependency>
     <dependency>

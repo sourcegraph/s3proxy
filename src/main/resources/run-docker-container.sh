@@ -1,9 +1,13 @@
 #!/bin/sh
 
 exec java \
+    $S3PROXY_JAVA_OPTS \
     -DLOG_LEVEL="${LOG_LEVEL}" \
     -Ds3proxy.endpoint="${S3PROXY_ENDPOINT}" \
+    -Ds3proxy.secure-endpoint="${S3PROXY_SECURE_ENDPOINT}" \
     -Ds3proxy.virtual-host="${S3PROXY_VIRTUALHOST}" \
+    -Ds3proxy.keystore-path="${S3PROXY_KEYSTORE_PATH}" \
+    -Ds3proxy.keystore-password="${S3PROXY_KEYSTORE_PASSWORD}" \
     -Ds3proxy.authorization="${S3PROXY_AUTHORIZATION}" \
     -Ds3proxy.identity="${S3PROXY_IDENTITY}" \
     -Ds3proxy.credential="${S3PROXY_CREDENTIAL}" \
@@ -15,7 +19,7 @@ exec java \
     -Ds3proxy.encrypted-blobstore="${S3PROXY_ENCRYPTED_BLOBSTORE}" \
     -Ds3proxy.encrypted-blobstore-password="${S3PROXY_ENCRYPTED_BLOBSTORE_PASSWORD}" \
     -Ds3proxy.encrypted-blobstore-salt="${S3PROXY_ENCRYPTED_BLOBSTORE_SALT}" \
-    -Ds3proxy.v4-max-non-chunked-request-size="${S3PROXY_V4_MAX_NON_CHUNKED_REQ_SIZE}" \
+    -Ds3proxy.v4-max-non-chunked-request-size="${S3PROXY_V4_MAX_NON_CHUNKED_REQ_SIZE:-33554432}" \
     -Djclouds.provider="${JCLOUDS_PROVIDER}" \
     -Djclouds.identity="${JCLOUDS_IDENTITY}" \
     -Djclouds.credential="${JCLOUDS_CREDENTIAL}" \
