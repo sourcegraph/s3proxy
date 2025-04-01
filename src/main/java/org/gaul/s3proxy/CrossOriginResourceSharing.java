@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2021 Andrew Gaul <andrew@gaul.org>
+ * Copyright 2014-2025 Andrew Gaul <andrew@gaul.org>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,8 @@
 
 package org.gaul.s3proxy;
 
-import java.util.Collection;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -26,20 +26,18 @@ import java.util.regex.Pattern;
 import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Lists;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public final class CrossOriginResourceSharing {
-    protected static final Collection<String> SUPPORTED_METHODS =
-            ImmutableList.of("GET", "HEAD", "PUT", "POST", "DELETE");
+    protected static final List<String> SUPPORTED_METHODS =
+            List.of("GET", "HEAD", "PUT", "POST", "DELETE");
 
     private static final String HEADER_VALUE_SEPARATOR = ", ";
     private static final String ALLOW_ANY_ORIGIN = "*";
     private static final String ALLOW_ANY_HEADER = "*";
+    private static final String EXPOSE_ALL_HEADERS = "*";
     private static final String ALLOW_CREDENTIALS = "true";
 
     private static final Logger logger = LoggerFactory.getLogger(
@@ -47,21 +45,26 @@ public final class CrossOriginResourceSharing {
 
     private final String allowedMethodsRaw;
     private final String allowedHeadersRaw;
+    private final String exposedHeadersRaw;
     private final boolean anyOriginAllowed;
-    private final Set<Pattern> allowedOrigins;
-    private final Set<String> allowedMethods;
-    private final Set<String> allowedHeaders;
+    // Enforce ordering of values
+    private final List<Pattern> allowedOrigins;
+    private final List<String> allowedMethods;
+    private final List<String> allowedHeaders;
+    private final List<String> exposedHeaders;
     private final String allowCredentials;
 
     public CrossOriginResourceSharing() {
         // CORS Allow all
-        this(Lists.newArrayList(ALLOW_ANY_ORIGIN), SUPPORTED_METHODS,
-                Lists.newArrayList(ALLOW_ANY_HEADER), "");
+        this(List.of(ALLOW_ANY_ORIGIN), SUPPORTED_METHODS,
+            List.of(ALLOW_ANY_HEADER),
+            List.of(EXPOSE_ALL_HEADERS), "");
     }
 
-    public CrossOriginResourceSharing(Collection<String> allowedOrigins,
-            Collection<String> allowedMethods,
-            Collection<String> allowedHeaders,
+    public CrossOriginResourceSharing(List<String> allowedOrigins,
+            List<String> allowedMethods,
+            List<String> allowedHeaders,
+            List<String> exposedHeaders,
             String allowCredentials) {
         Set<Pattern> allowedPattern = new HashSet<Pattern>();
         boolean anyOriginAllowed = false;
@@ -77,34 +80,47 @@ public final class CrossOriginResourceSharing {
             }
         }
         this.anyOriginAllowed = anyOriginAllowed;
-        this.allowedOrigins = ImmutableSet.copyOf(allowedPattern);
+        this.allowedOrigins = List.copyOf(allowedPattern);
 
         if (allowedMethods == null) {
-            this.allowedMethods = ImmutableSet.of();
+            this.allowedMethods = List.of();
         } else {
-            this.allowedMethods = ImmutableSet.copyOf(allowedMethods);
+            this.allowedMethods = List.copyOf(allowedMethods);
         }
         this.allowedMethodsRaw = Joiner.on(HEADER_VALUE_SEPARATOR).join(
                 this.allowedMethods);
 
         if (allowedHeaders == null) {
-            this.allowedHeaders = ImmutableSet.of();
+            this.allowedHeaders = List.of();
         } else {
-            this.allowedHeaders = ImmutableSet.copyOf(allowedHeaders);
+            this.allowedHeaders = List.copyOf(allowedHeaders);
         }
         this.allowedHeadersRaw = Joiner.on(HEADER_VALUE_SEPARATOR).join(
                 this.allowedHeaders);
+
+        if (exposedHeaders == null) {
+            this.exposedHeaders = List.of();
+        } else {
+            this.exposedHeaders = List.copyOf(exposedHeaders);
+        }
+        this.exposedHeadersRaw = Joiner.on(HEADER_VALUE_SEPARATOR).join(
+                this.exposedHeaders);
 
         this.allowCredentials = allowCredentials;
 
         logger.info("CORS allowed origins: {}", allowedOrigins);
         logger.info("CORS allowed methods: {}", allowedMethods);
         logger.info("CORS allowed headers: {}", allowedHeaders);
+        logger.info("CORS exposed headers: {}", exposedHeaders);
         logger.info("CORS allow credentials: {}", allowCredentials);
     }
 
     public String getAllowedMethods() {
         return this.allowedMethodsRaw;
+    }
+
+    public String getExposedHeaders() {
+        return this.exposedHeadersRaw;
     }
 
     public String getAllowedOrigin(String origin) {

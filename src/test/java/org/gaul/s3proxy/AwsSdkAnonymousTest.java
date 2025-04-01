@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2021 Andrew Gaul <andrew@gaul.org>
+ * Copyright 2014-2025 Andrew Gaul <andrew@gaul.org>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -114,7 +114,7 @@ public final class AwsSdkAnonymousTest {
             .withEndpointConfiguration(s3EndpointConfig)
             .build();
 
-        ObjectMetadata metadata = new ObjectMetadata();
+        var metadata = new ObjectMetadata();
         metadata.setContentLength(BYTE_SOURCE.size());
         client.putObject(containerName, "foo", BYTE_SOURCE.openStream(),
                 metadata);
@@ -124,7 +124,7 @@ public final class AwsSdkAnonymousTest {
                 BYTE_SOURCE.size());
         try (InputStream actual = object.getObjectContent();
             InputStream expected = BYTE_SOURCE.openStream()) {
-            assertThat(actual).hasContentEqualTo(expected);
+            assertThat(actual).hasSameContentAs(expected);
         }
     }
 

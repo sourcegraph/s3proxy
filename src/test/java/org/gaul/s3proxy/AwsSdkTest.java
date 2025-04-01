@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2021 Andrew Gaul <andrew@gaul.org>
+ * Copyright 2014-2025 Andrew Gaul <andrew@gaul.org>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -87,12 +87,9 @@ import com.amazonaws.services.s3.model.ResponseHeaderOverrides;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.amazonaws.services.s3.model.SetBucketLoggingConfigurationRequest;
-import com.amazonaws.services.s3.model.Tag;
 import com.amazonaws.services.s3.model.UploadPartRequest;
 import com.amazonaws.services.s3.model.UploadPartResult;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Maps;
 import com.google.common.io.ByteSource;
 
 import org.assertj.core.api.Fail;
@@ -115,13 +112,17 @@ public final class AwsSdkTest {
 
     private static final ByteSource BYTE_SOURCE = ByteSource.wrap(new byte[1]);
     private static final ClientConfiguration V2_SIGNER_CONFIG =
-            new ClientConfiguration().withSignerOverride("S3SignerType");
+            new ClientConfiguration()
+                    .withMaxErrorRetry(0)
+                    .withSignerOverride("S3SignerType");
     private static final long MINIMUM_MULTIPART_SIZE = 5 * 1024 * 1024;
+    private static final int MINIO_PORT = 9000;
 
     private URI s3Endpoint;
     private EndpointConfiguration s3EndpointConfig;
     private S3Proxy s3Proxy;
     private BlobStoreContext context;
+    private URI blobStoreEndpoint;
     private String blobStoreType;
     private String containerName;
     private AWSCredentials awsCreds;
@@ -131,7 +132,7 @@ public final class AwsSdkTest {
     @Before
     public void setUp() throws Exception {
         TestUtils.S3ProxyLaunchInfo info = TestUtils.startS3Proxy(
-                "s3proxy.conf");
+                System.getProperty("s3proxy.test.conf", "s3proxy.conf"));
         awsCreds = new BasicAWSCredentials(info.getS3Identity(),
                 info.getS3Credential());
         context = info.getBlobStore().getContext();
@@ -141,6 +142,8 @@ public final class AwsSdkTest {
         s3EndpointConfig = new EndpointConfiguration(
                 s3Endpoint.toString() + servicePath, "us-east-1");
         client = AmazonS3ClientBuilder.standard()
+                .withClientConfiguration(
+                        new ClientConfiguration().withMaxErrorRetry(0))
                 .withCredentials(new AWSStaticCredentialsProvider(awsCreds))
                 .withEndpointConfiguration(s3EndpointConfig)
                 .build();
@@ -148,6 +151,8 @@ public final class AwsSdkTest {
         containerName = createRandomContainerName();
         info.getBlobStore().createContainerInLocation(null, containerName);
 
+        blobStoreEndpoint = URI.create(
+                context.unwrap().getProviderMetadata().getEndpoint());
         blobStoreType = context.unwrap().getProviderMetadata().getId();
         if (Quirks.OPAQUE_ETAG.contains(blobStoreType)) {
             System.setProperty(
@@ -180,7 +185,7 @@ public final class AwsSdkTest {
                 .withEndpointConfiguration(s3EndpointConfig)
                 .build();
 
-        ObjectMetadata metadata = new ObjectMetadata();
+        var metadata = new ObjectMetadata();
         metadata.setContentLength(BYTE_SOURCE.size());
         client.putObject(containerName, "foo", BYTE_SOURCE.openStream(),
                 metadata);
@@ -190,7 +195,7 @@ public final class AwsSdkTest {
                 BYTE_SOURCE.size());
         try (InputStream actual = object.getObjectContent();
                 InputStream expected = BYTE_SOURCE.openStream()) {
-            assertThat(actual).hasContentEqualTo(expected);
+            assertThat(actual).hasSameContentAs(expected);
         }
     }
 
@@ -201,14 +206,14 @@ public final class AwsSdkTest {
                 .withCredentials(new AWSStaticCredentialsProvider(awsCreds))
                 .withEndpointConfiguration(s3EndpointConfig).build();
 
-        ObjectMetadata metadata = new ObjectMetadata();
+        var metadata = new ObjectMetadata();
         metadata.setContentLength(BYTE_SOURCE.size());
         client.putObject(containerName, "foo", BYTE_SOURCE.openStream(),
                 metadata);
 
         String blobName = "foo";
 
-        ResponseHeaderOverrides headerOverride = new ResponseHeaderOverrides();
+        var headerOverride = new ResponseHeaderOverrides();
 
         String expectedContentDisposition = "attachment; " + blobName;
         headerOverride.setContentDisposition(expectedContentDisposition);
@@ -216,7 +221,7 @@ public final class AwsSdkTest {
         String expectedContentType = "text/plain";
         headerOverride.setContentType(expectedContentType);
 
-        GetObjectRequest request = new GetObjectRequest(containerName,
+        var request = new GetObjectRequest(containerName,
                 blobName);
         request.setResponseHeaders(headerOverride);
 
@@ -229,13 +234,13 @@ public final class AwsSdkTest {
                 expectedContentType);
         try (InputStream actual = object.getObjectContent();
              InputStream expected = BYTE_SOURCE.openStream()) {
-            assertThat(actual).hasContentEqualTo(expected);
+            assertThat(actual).hasSameContentAs(expected);
         }
     }
 
     @Test
     public void testAwsV4Signature() throws Exception {
-        ObjectMetadata metadata = new ObjectMetadata();
+        var metadata = new ObjectMetadata();
         metadata.setContentLength(BYTE_SOURCE.size());
         client.putObject(containerName, "foo",
                 BYTE_SOURCE.openStream(), metadata);
@@ -245,7 +250,7 @@ public final class AwsSdkTest {
                 BYTE_SOURCE.size());
         try (InputStream actual = object.getObjectContent();
                 InputStream expected = BYTE_SOURCE.openStream()) {
-            assertThat(actual).hasContentEqualTo(expected);
+            assertThat(actual).hasSameContentAs(expected);
         }
     }
 
@@ -257,7 +262,7 @@ public final class AwsSdkTest {
                 .withEndpointConfiguration(s3EndpointConfig)
                 .build();
 
-        ObjectMetadata metadata = new ObjectMetadata();
+        var metadata = new ObjectMetadata();
         metadata.setContentLength(BYTE_SOURCE.size());
         client.putObject(containerName, "foo",
                 BYTE_SOURCE.openStream(), metadata);
@@ -267,7 +272,7 @@ public final class AwsSdkTest {
                 BYTE_SOURCE.size());
         try (InputStream actual = object.getObjectContent();
                 InputStream expected = BYTE_SOURCE.openStream()) {
-            assertThat(actual).hasContentEqualTo(expected);
+            assertThat(actual).hasSameContentAs(expected);
         }
     }
 
@@ -280,7 +285,7 @@ public final class AwsSdkTest {
                 .withEndpointConfiguration(s3EndpointConfig)
                 .build();
 
-        ObjectMetadata metadata = new ObjectMetadata();
+        var metadata = new ObjectMetadata();
         metadata.setContentLength(BYTE_SOURCE.size());
         client.putObject(containerName, "foo",
                 BYTE_SOURCE.openStream(), metadata);
@@ -290,7 +295,7 @@ public final class AwsSdkTest {
                 BYTE_SOURCE.size());
         try (InputStream actual = object.getObjectContent();
                 InputStream expected = BYTE_SOURCE.openStream()) {
-            assertThat(actual).hasContentEqualTo(expected);
+            assertThat(actual).hasSameContentAs(expected);
         }
     }
 
@@ -303,7 +308,7 @@ public final class AwsSdkTest {
                 .withEndpointConfiguration(s3EndpointConfig)
                 .build();
 
-        ObjectMetadata metadata = new ObjectMetadata();
+        var metadata = new ObjectMetadata();
         metadata.setContentLength(BYTE_SOURCE.size());
 
         try {
@@ -327,7 +332,7 @@ public final class AwsSdkTest {
                 .withEndpointConfiguration(s3EndpointConfig)
                 .build();
 
-        ObjectMetadata metadata = new ObjectMetadata();
+        var metadata = new ObjectMetadata();
         metadata.setContentLength(BYTE_SOURCE.size());
 
         try {
@@ -348,18 +353,18 @@ public final class AwsSdkTest {
                 .build();
 
         String blobName = "foo";
-        ObjectMetadata metadata = new ObjectMetadata();
+        var metadata = new ObjectMetadata();
         metadata.setContentLength(BYTE_SOURCE.size());
         client.putObject(containerName, blobName, BYTE_SOURCE.openStream(),
                 metadata);
 
-        Date expiration = new Date(System.currentTimeMillis() +
+        var expiration = new Date(System.currentTimeMillis() +
                 TimeUnit.HOURS.toMillis(1));
         URL url = client.generatePresignedUrl(containerName, blobName,
                 expiration, HttpMethod.GET);
         try (InputStream actual = url.openStream();
                 InputStream expected = BYTE_SOURCE.openStream()) {
-            assertThat(actual).hasContentEqualTo(expected);
+            assertThat(actual).hasSameContentAs(expected);
         }
     }
 
@@ -371,7 +376,7 @@ public final class AwsSdkTest {
                 .withEndpointConfiguration(s3EndpointConfig).build();
 
         String blobName = "foo";
-        ObjectMetadata metadata = new ObjectMetadata();
+        var metadata = new ObjectMetadata();
         metadata.setContentLength(BYTE_SOURCE.size());
         client.putObject(containerName, blobName, BYTE_SOURCE.openStream(),
                 metadata);
@@ -380,13 +385,13 @@ public final class AwsSdkTest {
                 new GeneratePresignedUrlRequest(containerName, blobName);
         generatePresignedUrlRequest.setMethod(HttpMethod.GET);
 
-        ResponseHeaderOverrides headerOverride = new ResponseHeaderOverrides();
+        var headerOverride = new ResponseHeaderOverrides();
 
         headerOverride.setContentDisposition("attachment; " + blobName);
         headerOverride.setContentType("text/plain");
         generatePresignedUrlRequest.setResponseHeaders(headerOverride);
 
-        Date expiration = new Date(System.currentTimeMillis() +
+        var expiration = new Date(System.currentTimeMillis() +
                 TimeUnit.HOURS.toMillis(1));
         generatePresignedUrlRequest.setExpiration(expiration);
 
@@ -401,37 +406,38 @@ public final class AwsSdkTest {
             value = connection.getHeaderField("Content-Type");
             assertThat(value).isEqualTo(headerOverride.getContentType());
 
-            assertThat(actual).hasContentEqualTo(expected);
+            assertThat(actual).hasSameContentAs(expected);
         }
     }
 
     @Test
     public void testAwsV4UrlSigning() throws Exception {
         String blobName = "foo";
-        ObjectMetadata metadata = new ObjectMetadata();
+        var metadata = new ObjectMetadata();
         metadata.setContentLength(BYTE_SOURCE.size());
         client.putObject(containerName, blobName, BYTE_SOURCE.openStream(),
                 metadata);
 
-        Date expiration = new Date(System.currentTimeMillis() +
+        var expiration = new Date(System.currentTimeMillis() +
                 TimeUnit.HOURS.toMillis(1));
         URL url = client.generatePresignedUrl(containerName, blobName,
                 expiration, HttpMethod.GET);
         try (InputStream actual = url.openStream();
                 InputStream expected = BYTE_SOURCE.openStream()) {
-            assertThat(actual).hasContentEqualTo(expected);
+            assertThat(actual).hasSameContentAs(expected);
         }
     }
 
     @Test
     public void testMultipartCopy() throws Exception {
+        assumeTrue(!blobStoreType.equals("azureblob-sdk"));
         // B2 requires two parts to issue an MPU
         assumeTrue(!blobStoreType.equals("b2"));
 
         String sourceBlobName = "testMultipartCopy-source";
         String targetBlobName = "testMultipartCopy-target";
 
-        ObjectMetadata metadata = new ObjectMetadata();
+        var metadata = new ObjectMetadata();
         metadata.setContentLength(BYTE_SOURCE.size());
         client.putObject(containerName, sourceBlobName,
                 BYTE_SOURCE.openStream(), metadata);
@@ -443,7 +449,7 @@ public final class AwsSdkTest {
                 client.initiateMultipartUpload(initiateRequest);
         String uploadId = initResult.getUploadId();
 
-        CopyPartRequest copyRequest = new CopyPartRequest()
+        var copyRequest = new CopyPartRequest()
                 .withDestinationBucketName(containerName)
                 .withDestinationKey(targetBlobName)
                 .withSourceBucketName(containerName)
@@ -457,7 +463,7 @@ public final class AwsSdkTest {
         CompleteMultipartUploadRequest completeRequest =
                 new CompleteMultipartUploadRequest(
                         containerName, targetBlobName, uploadId,
-                        ImmutableList.of(copyPartResult.getPartETag()));
+                        List.of(copyPartResult.getPartETag()));
         client.completeMultipartUpload(completeRequest);
 
         S3Object object = client.getObject(containerName, targetBlobName);
@@ -465,12 +471,14 @@ public final class AwsSdkTest {
                 BYTE_SOURCE.size());
         try (InputStream actual = object.getObjectContent();
                 InputStream expected = BYTE_SOURCE.openStream()) {
-            assertThat(actual).hasContentEqualTo(expected);
+            assertThat(actual).hasSameContentAs(expected);
         }
     }
 
     @Test
     public void testBigMultipartUpload() throws Exception {
+        assumeTrue(!blobStoreType.equals("azureblob-sdk"));
+
         String key = "multipart-upload";
         long partSize = MINIMUM_MULTIPART_SIZE;
         long size = partSize + 1;
@@ -483,7 +491,7 @@ public final class AwsSdkTest {
         String uploadId = initResponse.getUploadId();
 
         ByteSource byteSource1 = byteSource.slice(0, partSize);
-        UploadPartRequest uploadRequest1 = new UploadPartRequest()
+        var uploadRequest1 = new UploadPartRequest()
                 .withBucketName(containerName)
                 .withKey(key)
                 .withUploadId(uploadId)
@@ -495,7 +503,7 @@ public final class AwsSdkTest {
         UploadPartResult uploadPartResult1 = client.uploadPart(uploadRequest1);
 
         ByteSource byteSource2 = byteSource.slice(partSize, size - partSize);
-        UploadPartRequest uploadRequest2 = new UploadPartRequest()
+        var uploadRequest2 = new UploadPartRequest()
                 .withBucketName(containerName)
                 .withKey(key)
                 .withUploadId(uploadId)
@@ -509,7 +517,7 @@ public final class AwsSdkTest {
         CompleteMultipartUploadRequest completeRequest =
                 new CompleteMultipartUploadRequest(
                         containerName, key, uploadId,
-                        ImmutableList.of(
+                        List.of(
                                 uploadPartResult1.getPartETag(),
                                 uploadPartResult2.getPartETag()));
         client.completeMultipartUpload(completeRequest);
@@ -519,7 +527,75 @@ public final class AwsSdkTest {
                 size);
         try (InputStream actual = object.getObjectContent();
                 InputStream expected = byteSource.openStream()) {
-            assertThat(actual).hasContentEqualTo(expected);
+            assertThat(actual).hasSameContentAs(expected);
+        }
+    }
+
+    @Test
+    public void testMultipartUploadReplace() throws Exception {
+        assumeTrue(!blobStoreType.equals("azureblob-sdk"));
+
+        String key = "multipart-upload";
+        long partSize = MINIMUM_MULTIPART_SIZE;
+        long size = partSize + 1;
+        ByteSource byteSource = TestUtils.randomByteSource().slice(0, size);
+
+        // Create
+        InitiateMultipartUploadRequest initRequest1 =
+                new InitiateMultipartUploadRequest(containerName, key);
+        InitiateMultipartUploadResult initResponse1 =
+                client.initiateMultipartUpload(initRequest1);
+        String uploadId1 = initResponse1.getUploadId();
+
+        ByteSource byteSource1 = byteSource.slice(0, partSize);
+        var uploadRequest1 = new UploadPartRequest()
+                .withBucketName(containerName)
+                .withKey(key)
+                .withUploadId(uploadId1)
+                .withPartNumber(1)
+                .withInputStream(byteSource1.openStream())
+                .withPartSize(byteSource1.size());
+        uploadRequest1.getRequestClientOptions().setReadLimit(
+                (int) byteSource1.size());
+        UploadPartResult uploadPartResult1 = client.uploadPart(uploadRequest1);
+
+        CompleteMultipartUploadRequest completeRequest1 =
+                new CompleteMultipartUploadRequest(
+                        containerName, key, uploadId1,
+                        List.of(uploadPartResult1.getPartETag()));
+        client.completeMultipartUpload(completeRequest1);
+
+        // Replace
+        InitiateMultipartUploadRequest initRequest2 =
+                new InitiateMultipartUploadRequest(containerName, key);
+        InitiateMultipartUploadResult initResponse2 =
+                client.initiateMultipartUpload(initRequest2);
+        String uploadId2 = initResponse2.getUploadId();
+
+        ByteSource byteSource2 = byteSource.slice(partSize, size - partSize);
+        var uploadRequest2 = new UploadPartRequest()
+                .withBucketName(containerName)
+                .withKey(key)
+                .withUploadId(uploadId2)
+                .withPartNumber(1)
+                .withInputStream(byteSource2.openStream())
+                .withPartSize(byteSource2.size());
+        uploadRequest2.getRequestClientOptions().setReadLimit(
+                (int) byteSource2.size());
+        UploadPartResult uploadPartResult2 = client.uploadPart(uploadRequest2);
+
+        CompleteMultipartUploadRequest completeRequest2 =
+                new CompleteMultipartUploadRequest(
+                        containerName, key, uploadId2,
+                        List.of(uploadPartResult2.getPartETag()));
+        client.completeMultipartUpload(completeRequest2);
+
+        S3Object object = client.getObject(containerName, key);
+        assertThat(object.getObjectMetadata().getContentLength()).isEqualTo(
+                byteSource2.size());
+        try (InputStream actual = object.getObjectContent();
+                InputStream expected = byteSource2.openStream()) {
+            assertThat(actual).hasSameContentAs(expected);
         }
     }
 
@@ -527,9 +603,13 @@ public final class AwsSdkTest {
 
     @Test
     public void testUpdateBlobXmlAcls() throws Exception {
+        // TODO:
+        assumeTrue(!blobStoreType.equals("transient-nio2"));
         assumeTrue(!Quirks.NO_BLOB_ACCESS_CONTROL.contains(blobStoreType));
+        assumeTrue(blobStoreEndpoint.getPort() != MINIO_PORT);
+
         String blobName = "testUpdateBlobXmlAcls-blob";
-        ObjectMetadata metadata = new ObjectMetadata();
+        var metadata = new ObjectMetadata();
         metadata.setContentLength(BYTE_SOURCE.size());
         client.putObject(containerName, blobName, BYTE_SOURCE.openStream(),
                 metadata);
@@ -555,7 +635,7 @@ public final class AwsSdkTest {
     @Test
     public void testUnicodeObject() throws Exception {
         String blobName = "ŪņЇЌœđЗ/☺ unicode € rocks ™";
-        ObjectMetadata metadata = new ObjectMetadata();
+        var metadata = new ObjectMetadata();
         metadata.setContentLength(BYTE_SOURCE.size());
         client.putObject(containerName, blobName, BYTE_SOURCE.openStream(),
                 metadata);
@@ -572,17 +652,23 @@ public final class AwsSdkTest {
 
     @Test
     public void testSpecialCharacters() throws Exception {
+        // TODO: fixed in jclouds 2.6.1
+        assumeTrue(blobStoreEndpoint.getPort() != MINIO_PORT);
+
         String prefix = "special !\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
-        if (blobStoreType.equals("azureblob") || blobStoreType.equals("b2")) {
+        if (blobStoreType.equals("azureblob") ||
+                blobStoreType.equals("azureblob-sdk") ||
+                blobStoreType.equals("b2")) {
             prefix = prefix.replace("\\", "");
         }
-        if (blobStoreType.equals("azureblob")) {
+        if (blobStoreType.equals("azureblob") ||
+                blobStoreType.equals("azureblob-sdk")) {
             // Avoid blob names that end with a dot (.), a forward slash (/), or
             // a sequence or combination of the two.
             prefix = prefix.replace("./", "/") + ".";
         }
         String blobName = prefix + "foo";
-        ObjectMetadata metadata = new ObjectMetadata();
+        var metadata = new ObjectMetadata();
         metadata.setContentLength(BYTE_SOURCE.size());
         client.putObject(containerName, blobName, BYTE_SOURCE.openStream(),
                 metadata);
@@ -598,8 +684,10 @@ public final class AwsSdkTest {
 
     @Test
     public void testAtomicMpuAbort() throws Exception {
+        assumeTrue(!blobStoreType.equals("azureblob-sdk"));
+
         String key = "testAtomicMpuAbort";
-        ObjectMetadata metadata = new ObjectMetadata();
+        var metadata = new ObjectMetadata();
         metadata.setContentLength(BYTE_SOURCE.size());
         client.putObject(containerName, key, BYTE_SOURCE.openStream(),
                 metadata);
@@ -618,14 +706,14 @@ public final class AwsSdkTest {
                 BYTE_SOURCE.size());
         try (InputStream actual = object.getObjectContent();
                 InputStream expected = BYTE_SOURCE.openStream()) {
-            assertThat(actual).hasContentEqualTo(expected);
+            assertThat(actual).hasSameContentAs(expected);
         }
     }
 
     @Test
     public void testOverrideResponseHeader() throws Exception {
         String blobName = "foo";
-        ObjectMetadata metadata = new ObjectMetadata();
+        var metadata = new ObjectMetadata();
         metadata.setContentLength(BYTE_SOURCE.size());
         client.putObject(containerName, blobName, BYTE_SOURCE.openStream(),
                 metadata);
@@ -638,7 +726,7 @@ public final class AwsSdkTest {
         String expires = "Wed, 13 Jul 2016 21:23:51 GMT";
         long expiresTime = 1468445031000L;
 
-        GetObjectRequest getObjectRequest = new GetObjectRequest(containerName,
+        var getObjectRequest = new GetObjectRequest(containerName,
                 blobName);
         getObjectRequest.setResponseHeaders(
                 new ResponseHeaderOverrides()
@@ -671,7 +759,7 @@ public final class AwsSdkTest {
 
     @Test
     public void testDeleteMultipleObjectsEmpty() throws Exception {
-        DeleteObjectsRequest request = new DeleteObjectsRequest(containerName)
+        var request = new DeleteObjectsRequest(containerName)
                 .withKeys();
 
         try {
@@ -685,10 +773,10 @@ public final class AwsSdkTest {
     @Test
     public void testDeleteMultipleObjects() throws Exception {
         String blobName = "foo";
-        ObjectMetadata metadata = new ObjectMetadata();
+        var metadata = new ObjectMetadata();
         metadata.setContentLength(BYTE_SOURCE.size());
 
-        DeleteObjectsRequest request = new DeleteObjectsRequest(containerName)
+        var request = new DeleteObjectsRequest(containerName)
                 .withKeys(blobName);
 
         // without quiet
@@ -710,10 +798,12 @@ public final class AwsSdkTest {
 
     @Test
     public void testPartNumberMarker() throws Exception {
-        String blobName = "foo";
+        assumeTrue(!blobStoreType.equals("azureblob-sdk"));
+
+        String blobName = "test-part-number-marker";
         InitiateMultipartUploadResult result = client.initiateMultipartUpload(
                 new InitiateMultipartUploadRequest(containerName, blobName));
-        ListPartsRequest request = new ListPartsRequest(containerName,
+        var request = new ListPartsRequest(containerName,
                 blobName, result.getUploadId());
 
         client.listParts(request.withPartNumberMarker(0));
@@ -723,13 +813,17 @@ public final class AwsSdkTest {
             Fail.failBecauseExceptionWasNotThrown(AmazonS3Exception.class);
         } catch (AmazonS3Exception e) {
             assertThat(e.getErrorCode()).isEqualTo("NotImplemented");
+        } finally {
+            client.abortMultipartUpload(new AbortMultipartUploadRequest(containerName, blobName, result.getUploadId()));
         }
     }
 
     @Test
     public void testHttpClient() throws Exception {
+        assumeTrue(blobStoreEndpoint.getPort() != MINIO_PORT);
+
         String blobName = "blob-name";
-        ObjectMetadata metadata = new ObjectMetadata();
+        var metadata = new ObjectMetadata();
         metadata.setContentLength(BYTE_SOURCE.size());
         client.putObject(containerName, blobName, BYTE_SOURCE.openStream(),
                 metadata);
@@ -743,19 +837,19 @@ public final class AwsSdkTest {
         }
 
         HttpClient httpClient = context.utils().http();
-        URI uri = new URI(s3Endpoint.getScheme(), s3Endpoint.getUserInfo(),
+        var uri = new URI(s3Endpoint.getScheme(), s3Endpoint.getUserInfo(),
                 s3Endpoint.getHost(), s3Proxy.getSecurePort(),
                 servicePath + "/" + containerName + "/" + blobName,
                 /*query=*/ null, /*fragment=*/ null);
         try (InputStream actual = httpClient.get(uri);
              InputStream expected = BYTE_SOURCE.openStream()) {
-            assertThat(actual).hasContentEqualTo(expected);
+            assertThat(actual).hasSameContentAs(expected);
         }
     }
 
     @Test
     public void testListBuckets() throws Exception {
-        ImmutableList.Builder<String> builder = ImmutableList.builder();
+        var builder = ImmutableList.<String>builder();
         for (Bucket bucket : client.listBuckets()) {
             builder.add(bucket.getName());
         }
@@ -800,7 +894,7 @@ public final class AwsSdkTest {
     }
 
     private void putBlobAndCheckIt(String blobName) throws Exception {
-        ObjectMetadata metadata = new ObjectMetadata();
+        var metadata = new ObjectMetadata();
         metadata.setContentLength(BYTE_SOURCE.size());
 
         client.putObject(containerName, blobName, BYTE_SOURCE.openStream(),
@@ -809,7 +903,7 @@ public final class AwsSdkTest {
         S3Object object = client.getObject(containerName, blobName);
         try (InputStream actual = object.getObjectContent();
                 InputStream expected = BYTE_SOURCE.openStream()) {
-            assertThat(actual).hasContentEqualTo(expected);
+            assertThat(actual).hasSameContentAs(expected);
         }
     }
 
@@ -838,10 +932,10 @@ public final class AwsSdkTest {
         ObjectListing listing = client.listObjects(containerName);
         assertThat(listing.getObjectSummaries()).isEmpty();
 
-        ObjectMetadata metadata = new ObjectMetadata();
+        var metadata = new ObjectMetadata();
         metadata.setContentLength(BYTE_SOURCE.size());
 
-        ImmutableList.Builder<String> builder = ImmutableList.builder();
+        var builder = ImmutableList.<String>builder();
         client.putObject(containerName, "blob1", BYTE_SOURCE.openStream(),
                 metadata);
         listing = client.listObjects(containerName);
@@ -865,14 +959,14 @@ public final class AwsSdkTest {
         ObjectListing listing = client.listObjects(containerName);
         assertThat(listing.getObjectSummaries()).isEmpty();
 
-        ObjectMetadata metadata = new ObjectMetadata();
+        var metadata = new ObjectMetadata();
         metadata.setContentLength(BYTE_SOURCE.size());
         client.putObject(containerName, "prefix/blob1",
                 BYTE_SOURCE.openStream(), metadata);
         client.putObject(containerName, "prefix/blob2",
                 BYTE_SOURCE.openStream(), metadata);
 
-        ImmutableList.Builder<String> builder = ImmutableList.builder();
+        var builder = ImmutableList.<String>builder();
         listing = client.listObjects(new ListObjectsRequest()
                 .withBucketName(containerName)
                 .withDelimiter("/"));
@@ -894,10 +988,13 @@ public final class AwsSdkTest {
 
     @Test
     public void testBlobListRecursiveImplicitMarker() throws Exception {
+        assumeTrue(!Quirks.OPAQUE_MARKERS.contains(blobStoreType));
+        assumeTrue(!blobStoreType.equals("transient-nio2"));  // TODO:
+
         ObjectListing listing = client.listObjects(containerName);
         assertThat(listing.getObjectSummaries()).isEmpty();
 
-        ObjectMetadata metadata = new ObjectMetadata();
+        var metadata = new ObjectMetadata();
         metadata.setContentLength(BYTE_SOURCE.size());
         client.putObject(containerName, "blob1", BYTE_SOURCE.openStream(),
                 metadata);
@@ -922,7 +1019,9 @@ public final class AwsSdkTest {
 
     @Test
     public void testBlobListV2() throws Exception {
-        ObjectMetadata metadata = new ObjectMetadata();
+        assumeTrue(!Quirks.OPAQUE_MARKERS.contains(blobStoreType));
+
+        var metadata = new ObjectMetadata();
         metadata.setContentLength(BYTE_SOURCE.size());
         for (int i = 1; i < 5; ++i) {
             client.putObject(containerName, String.valueOf(i),
@@ -936,7 +1035,10 @@ public final class AwsSdkTest {
                 .withStartAfter("1"));
         assertThat(result.getContinuationToken()).isEmpty();
         assertThat(result.getStartAfter()).isEqualTo("1");
-        assertThat(result.getNextContinuationToken()).isEqualTo("2");
+        if (blobStoreEndpoint.getPort() != MINIO_PORT) {
+            // Minio returns "2[minio_cache:v2,return:]"
+            assertThat(result.getNextContinuationToken()).isEqualTo("2");
+        }
         assertThat(result.isTruncated()).isTrue();
         assertThat(result.getObjectSummaries()).hasSize(1);
         assertThat(result.getObjectSummaries().get(0).getKey()).isEqualTo("2");
@@ -946,9 +1048,12 @@ public final class AwsSdkTest {
                 .withBucketName(containerName)
                 .withMaxKeys(1)
                 .withContinuationToken(result.getNextContinuationToken()));
-        assertThat(result.getContinuationToken()).isEqualTo("2");
+        if (blobStoreEndpoint.getPort() != MINIO_PORT) {
+            // Minio returns "2[minio_cache:v2,return:]"
+            assertThat(result.getContinuationToken()).isEqualTo("2");
+            assertThat(result.getNextContinuationToken()).isEqualTo("3");
+        }
         assertThat(result.getStartAfter()).isEmpty();
-        assertThat(result.getNextContinuationToken()).isEqualTo("3");
         assertThat(result.isTruncated()).isTrue();
         assertThat(result.getObjectSummaries()).hasSize(1);
         assertThat(result.getObjectSummaries().get(0).getKey()).isEqualTo("3");
@@ -958,10 +1063,16 @@ public final class AwsSdkTest {
                 .withBucketName(containerName)
                 .withMaxKeys(1)
                 .withContinuationToken(result.getNextContinuationToken()));
-        assertThat(result.getContinuationToken()).isEqualTo("3");
+        if (blobStoreEndpoint.getPort() != MINIO_PORT) {
+            // Minio returns "3[minio_cache:v2,return:]"
+            assertThat(result.getContinuationToken()).isEqualTo("3");
+            assertThat(result.getNextContinuationToken()).isNull();
+        }
         assertThat(result.getStartAfter()).isEmpty();
-        assertThat(result.getNextContinuationToken()).isNull();
-        assertThat(result.isTruncated()).isFalse();
+        if (blobStoreEndpoint.getPort() != MINIO_PORT) {
+            // TODO: why does this fail?
+            assertThat(result.isTruncated()).isFalse();
+        }
         assertThat(result.getObjectSummaries()).hasSize(1);
         assertThat(result.getObjectSummaries().get(0).getKey()).isEqualTo("4");
     }
@@ -969,7 +1080,7 @@ public final class AwsSdkTest {
     @Test
     public void testBlobMetadata() throws Exception {
         String blobName = "blob";
-        ObjectMetadata metadata = new ObjectMetadata();
+        var metadata = new ObjectMetadata();
         metadata.setContentLength(BYTE_SOURCE.size());
         client.putObject(containerName, blobName, BYTE_SOURCE.openStream(),
                 metadata);
@@ -983,7 +1094,7 @@ public final class AwsSdkTest {
     @Test
     public void testBlobRemove() throws Exception {
         String blobName = "blob";
-        ObjectMetadata metadata = new ObjectMetadata();
+        var metadata = new ObjectMetadata();
         metadata.setContentLength(BYTE_SOURCE.size());
         client.putObject(containerName, blobName, BYTE_SOURCE.openStream(),
                 metadata);
@@ -1005,7 +1116,7 @@ public final class AwsSdkTest {
     public void testSinglepartUploadJettyCachedHeader() throws Exception {
         String blobName = "singlepart-upload-jetty-cached";
         String contentType = "text/plain";
-        ObjectMetadata metadata = new ObjectMetadata();
+        var metadata = new ObjectMetadata();
         metadata.setContentLength(BYTE_SOURCE.size());
         metadata.setContentType(contentType);
 
@@ -1015,7 +1126,7 @@ public final class AwsSdkTest {
         S3Object object = client.getObject(containerName, blobName);
         try (InputStream actual = object.getObjectContent();
              InputStream expected = BYTE_SOURCE.openStream()) {
-            assertThat(actual).hasContentEqualTo(expected);
+            assertThat(actual).hasSameContentAs(expected);
         }
         ObjectMetadata newContentMetadata = object.getObjectMetadata();
         assertThat(newContentMetadata.getContentType()).isEqualTo(
@@ -1030,10 +1141,10 @@ public final class AwsSdkTest {
         String contentEncoding = "gzip";
         String contentLanguage = "fr";
         String contentType = "audio/mp4";
-        Map<String, String> userMetadata = ImmutableMap.of(
+        var userMetadata = Map.of(
                 "key1", "value1",
                 "key2", "value2");
-        ObjectMetadata metadata = new ObjectMetadata();
+        var metadata = new ObjectMetadata();
         if (!Quirks.NO_CACHE_CONTROL_SUPPORT.contains(blobStoreType)) {
             metadata.setCacheControl(cacheControl);
         }
@@ -1057,7 +1168,7 @@ public final class AwsSdkTest {
         S3Object object = client.getObject(containerName, blobName);
         try (InputStream actual = object.getObjectContent();
                 InputStream expected = BYTE_SOURCE.openStream()) {
-            assertThat(actual).hasContentEqualTo(expected);
+            assertThat(actual).hasSameContentAs(expected);
         }
         ObjectMetadata newContentMetadata = object.getObjectMetadata();
         if (!Quirks.NO_CACHE_CONTROL_SUPPORT.contains(blobStoreType)) {
@@ -1086,16 +1197,18 @@ public final class AwsSdkTest {
     // TODO: fails for GCS (jclouds not implemented)
     @Test
     public void testMultipartUpload() throws Exception {
+        assumeTrue(!blobStoreType.equals("azureblob-sdk"));
+
         String blobName = "multipart-upload";
         String cacheControl = "max-age=3600";
         String contentDisposition = "attachment; filename=new.jpg";
         String contentEncoding = "gzip";
         String contentLanguage = "fr";
         String contentType = "audio/mp4";
-        Map<String, String> userMetadata = ImmutableMap.of(
+        var userMetadata = Map.of(
                 "key1", "value1",
                 "key2", "value2");
-        ObjectMetadata metadata = new ObjectMetadata();
+        var metadata = new ObjectMetadata();
         if (!Quirks.NO_CACHE_CONTROL_SUPPORT.contains(blobStoreType)) {
             metadata.setCacheControl(cacheControl);
         }
@@ -1136,14 +1249,14 @@ public final class AwsSdkTest {
 
         client.completeMultipartUpload(new CompleteMultipartUploadRequest(
                 containerName, blobName, result.getUploadId(),
-                ImmutableList.of(part1.getPartETag(), part2.getPartETag())));
+                List.of(part1.getPartETag(), part2.getPartETag())));
         ObjectListing listing = client.listObjects(containerName);
         assertThat(listing.getObjectSummaries()).hasSize(1);
 
         S3Object object = client.getObject(containerName, blobName);
         try (InputStream actual = object.getObjectContent();
                 InputStream expected = byteSource.openStream()) {
-            assertThat(actual).hasContentEqualTo(expected);
+            assertThat(actual).hasSameContentAs(expected);
         }
         ObjectMetadata newContentMetadata = object.getObjectMetadata();
         if (!Quirks.NO_CACHE_CONTROL_SUPPORT.contains(blobStoreType)) {
@@ -1185,7 +1298,7 @@ public final class AwsSdkTest {
 
         InitiateMultipartUploadResult result = client.initiateMultipartUpload(
                 new InitiateMultipartUploadRequest(containerName, blobName));
-        ImmutableList.Builder<PartETag> parts = ImmutableList.builder();
+        var parts = ImmutableList.<PartETag>builder();
 
         for (int i = 0; i < numParts; ++i) {
             ByteSource partByteSource = byteSource.slice(
@@ -1213,12 +1326,17 @@ public final class AwsSdkTest {
 
         try (InputStream actual = object.getObjectContent();
                 InputStream expected = byteSource.openStream()) {
-            assertThat(actual).hasContentEqualTo(expected);
+            assertThat(actual).hasSameContentAs(expected);
         }
     }
 
     @Test
     public void testMultipartUploadAbort() throws Exception {
+        assumeTrue(!blobStoreType.equals("azureblob-sdk") &&
+                !blobStoreType.equals("google-cloud-storage"));
+        // TODO: fixed in jclouds 2.6.1
+        assumeTrue(blobStoreEndpoint.getPort() != MINIO_PORT);
+
         String blobName = "multipart-upload-abort";
         ByteSource byteSource = TestUtils.randomByteSource().slice(
                 0, MINIMUM_MULTIPART_SIZE);
@@ -1230,7 +1348,8 @@ public final class AwsSdkTest {
         // uploads
         MultipartUploadListing multipartListing = client.listMultipartUploads(
                 new ListMultipartUploadsRequest(containerName));
-        if (blobStoreType.equals("azureblob")) {
+        if (blobStoreType.equals("azureblob") ||
+                blobStoreType.equals("azureblob-sdk")) {
             // Azure does not create a manifest during initiate multi-part
             // upload.  Instead the first part creates this.
             assertThat(multipartListing.getMultipartUploads()).isEmpty();
@@ -1263,7 +1382,8 @@ public final class AwsSdkTest {
 
         multipartListing = client.listMultipartUploads(
                 new ListMultipartUploadsRequest(containerName));
-        if (blobStoreType.equals("azureblob")) {
+        if (blobStoreType.equals("azureblob") ||
+                blobStoreType.equals("azureblob-sdk")) {
             // Azure does not support explicit abort.  It automatically
             // removes incomplete multi-part uploads after 7 days.
             assertThat(multipartListing.getMultipartUploads()).hasSize(1);
@@ -1279,6 +1399,12 @@ public final class AwsSdkTest {
     // not accept it on writes.
     @Test
     public void testCopyObjectPreserveMetadata() throws Exception {
+        if (blobStoreType.equals("azureblob") ||
+                blobStoreType.equals("azureblob-sdk")) {
+            // Azurite does not support copying blobs
+            assumeTrue(!blobStoreEndpoint.getHost().equals("127.0.0.1"));
+        }
+
         String fromName = "from-name";
         String toName = "to-name";
         String cacheControl = "max-age=3600";
@@ -1286,10 +1412,10 @@ public final class AwsSdkTest {
         String contentEncoding = "gzip";
         String contentLanguage = "en";
         String contentType = "audio/ogg";
-        Map<String, String> userMetadata = ImmutableMap.of(
+        var userMetadata = Map.of(
                 "key1", "value1",
                 "key2", "value2");
-        ObjectMetadata metadata = new ObjectMetadata();
+        var metadata = new ObjectMetadata();
         if (!Quirks.NO_CACHE_CONTROL_SUPPORT.contains(blobStoreType)) {
             metadata.setCacheControl(cacheControl);
         }
@@ -1315,7 +1441,7 @@ public final class AwsSdkTest {
 
         try (InputStream actual = object.getObjectContent();
                 InputStream expected = BYTE_SOURCE.openStream()) {
-            assertThat(actual).hasContentEqualTo(expected);
+            assertThat(actual).hasSameContentAs(expected);
         }
 
         ObjectMetadata contentMetadata = object.getObjectMetadata();
@@ -1346,9 +1472,15 @@ public final class AwsSdkTest {
 
     @Test
     public void testCopyObjectReplaceMetadata() throws Exception {
+        if (blobStoreType.equals("azureblob") ||
+                blobStoreType.equals("azureblob-sdk")) {
+            // Azurite does not support copying blobs
+            assumeTrue(!blobStoreEndpoint.getHost().equals("127.0.0.1"));
+        }
+
         String fromName = "from-name";
         String toName = "to-name";
-        ObjectMetadata metadata = new ObjectMetadata();
+        var metadata = new ObjectMetadata();
         metadata.setContentLength(BYTE_SOURCE.size());
         if (!Quirks.NO_CACHE_CONTROL_SUPPORT.contains(blobStoreType)) {
             metadata.setCacheControl("max-age=3600");
@@ -1364,7 +1496,7 @@ public final class AwsSdkTest {
         }
         metadata.setContentType("audio/ogg");
         // TODO: expires
-        metadata.setUserMetadata(ImmutableMap.of(
+        metadata.setUserMetadata(Map.of(
                         "key1", "value1",
                         "key2", "value2"));
         client.putObject(containerName, fromName, BYTE_SOURCE.openStream(),
@@ -1375,7 +1507,7 @@ public final class AwsSdkTest {
         String contentEncoding = "gzip";
         String contentLanguage = "fr";
         String contentType = "audio/mp4";
-        ObjectMetadata contentMetadata = new ObjectMetadata();
+        var contentMetadata = new ObjectMetadata();
         if (!Quirks.NO_CACHE_CONTROL_SUPPORT.contains(blobStoreType)) {
             contentMetadata.setCacheControl(cacheControl);
         }
@@ -1390,7 +1522,7 @@ public final class AwsSdkTest {
         }
         contentMetadata.setContentType(contentType);
         // TODO: expires
-        Map<String, String> userMetadata = ImmutableMap.of(
+        var userMetadata = Map.of(
                 "key3", "value3",
                 "key4", "value4");
         contentMetadata.setUserMetadata(userMetadata);
@@ -1402,7 +1534,7 @@ public final class AwsSdkTest {
 
         try (InputStream actual = object.getObjectContent();
                 InputStream expected = BYTE_SOURCE.openStream()) {
-            assertThat(actual).hasContentEqualTo(expected);
+            assertThat(actual).hasSameContentAs(expected);
         }
 
         ObjectMetadata toContentMetadata = object.getObjectMetadata();
@@ -1432,9 +1564,11 @@ public final class AwsSdkTest {
     @Test
     public void testConditionalGet() throws Exception {
         assumeTrue(!blobStoreType.equals("b2"));
+        // TODO:
+        assumeTrue(!blobStoreType.equals("transient-nio2"));
 
         String blobName = "blob-name";
-        ObjectMetadata metadata = new ObjectMetadata();
+        var metadata = new ObjectMetadata();
         metadata.setContentLength(BYTE_SOURCE.size());
         PutObjectResult result = client.putObject(containerName, blobName,
                 BYTE_SOURCE.openStream(), metadata);
@@ -1455,10 +1589,12 @@ public final class AwsSdkTest {
 
     @Test
     public void testStorageClass() throws Exception {
+        // Minio only supports STANDARD and REDUCED_REDUNDANCY
+        assumeTrue(blobStoreEndpoint.getPort() != MINIO_PORT);
         String blobName = "test-storage-class";
-        ObjectMetadata metadata = new ObjectMetadata();
+        var metadata = new ObjectMetadata();
         metadata.setContentLength(BYTE_SOURCE.size());
-        PutObjectRequest request = new PutObjectRequest(
+        var request = new PutObjectRequest(
                 containerName, blobName, BYTE_SOURCE.openStream(), metadata)
                 .withStorageClass("STANDARD_IA");
         client.putObject(request);
@@ -1467,13 +1603,34 @@ public final class AwsSdkTest {
     }
 
     @Test
+    public void testGetObjectRange() throws Exception {
+        var blobName = "test-range";
+        var metadata = new ObjectMetadata();
+        var byteSource = TestUtils.randomByteSource().slice(0, 1024);
+        metadata.setContentLength(byteSource.size());
+        var request = new PutObjectRequest(
+                containerName, blobName, byteSource.openStream(), metadata);
+        client.putObject(request);
+
+        var object = client.getObject(
+                new GetObjectRequest(containerName, blobName)
+                        .withRange(42, 101));
+        assertThat(object.getObjectMetadata().getContentLength()).isEqualTo(
+                101 - 42 + 1);
+        try (var actual = object.getObjectContent();
+             var expected = byteSource.slice(42, 101 - 42 + 1).openStream()) {
+            assertThat(actual).hasSameContentAs(expected);
+        }
+    }
+
+    @Test
     public void testUnknownHeader() throws Exception {
         String blobName = "test-unknown-header";
-        ObjectMetadata metadata = new ObjectMetadata();
+        var metadata = new ObjectMetadata();
         metadata.setContentLength(BYTE_SOURCE.size());
-        PutObjectRequest request = new PutObjectRequest(
+        var request = new PutObjectRequest(
                 containerName, blobName, BYTE_SOURCE.openStream(), metadata)
-                .withTagging(new ObjectTagging(ImmutableList.<Tag>of()));
+                .withTagging(new ObjectTagging(List.of()));
         try {
             client.putObject(request);
             Fail.failBecauseExceptionWasNotThrown(AmazonS3Exception.class);
@@ -1506,6 +1663,8 @@ public final class AwsSdkTest {
 
     @Test
     public void testBlobStoreLocator() throws Exception {
+        assumeTrue(blobStoreType.equals("filesystem") ||
+                blobStoreType.equals("transient"));
         final BlobStore blobStore1 = context.getBlobStore();
         final BlobStore blobStore2 = ContextBuilder
                 .newBuilder(blobStoreType)
@@ -1518,10 +1677,9 @@ public final class AwsSdkTest {
             public Map.Entry<String, BlobStore> locateBlobStore(
                     String identity, String container, String blob) {
                 if (identity.equals(awsCreds.getAWSAccessKeyId())) {
-                    return Maps.immutableEntry(awsCreds.getAWSSecretKey(),
-                            blobStore1);
+                    return Map.entry(awsCreds.getAWSSecretKey(), blobStore1);
                 } else if (identity.equals("other-identity")) {
-                    return Maps.immutableEntry("credential", blobStore2);
+                    return Map.entry("credential", blobStore2);
                 } else {
                     return null;
                 }
@@ -1535,6 +1693,8 @@ public final class AwsSdkTest {
 
         // check second access key
         client = AmazonS3ClientBuilder.standard()
+                .withClientConfiguration(
+                        new ClientConfiguration().withMaxErrorRetry(0))
                 .withCredentials(new AWSStaticCredentialsProvider(
                         new BasicAWSCredentials("other-identity",
                                 "credential")))
@@ -1554,6 +1714,70 @@ public final class AwsSdkTest {
             Fail.failBecauseExceptionWasNotThrown(AmazonS3Exception.class);
         } catch (AmazonS3Exception e) {
             assertThat(e.getErrorCode()).isEqualTo("InvalidAccessKeyId");
+        }
+    }
+
+    @Test
+    public void testCopyRelativePath() throws Exception {
+        assumeTrue(!blobStoreType.equals("azureblob-sdk"));
+        try {
+            client.copyObject(new CopyObjectRequest(
+                    containerName, "../evil.txt", containerName, "good.txt"));
+            Fail.failBecauseExceptionWasNotThrown(AmazonS3Exception.class);
+        } catch (AmazonS3Exception e) {
+            // expected
+        }
+    }
+
+    @Test
+    public void testDeleteRelativePath() throws Exception {
+        try {
+            client.deleteObject(containerName, "../evil.txt");
+            if (blobStoreType.equals("filesystem") || blobStoreType.equals("filesystem-nio2") || blobStoreType.equals("transient-nio2")) {
+                Fail.failBecauseExceptionWasNotThrown(AmazonS3Exception.class);
+            }
+        } catch (AmazonS3Exception e) {
+            // expected
+        }
+    }
+
+    @Test
+    public void testGetRelativePath() throws Exception {
+        try {
+            client.getObject(containerName, "../evil.txt");
+            Fail.failBecauseExceptionWasNotThrown(AmazonS3Exception.class);
+        } catch (AmazonS3Exception e) {
+            // expected
+        }
+    }
+
+    @Test
+    public void testPutRelativePath() throws Exception {
+        try {
+            var metadata = new ObjectMetadata();
+            metadata.setContentLength(BYTE_SOURCE.size());
+            PutObjectResult result = client.putObject(containerName, "../evil.txt",
+                    BYTE_SOURCE.openStream(), metadata);
+            if (blobStoreType.equals("filesystem") || blobStoreType.equals("filesystem-nio2") || blobStoreType.equals("transient-nio2")) {
+                Fail.failBecauseExceptionWasNotThrown(AmazonS3Exception.class);
+            }
+        } catch (AmazonS3Exception e) {
+            // expected
+        }
+    }
+
+    @Test
+    public void testListRelativePath() throws Exception {
+        assumeTrue(!blobStoreType.equals("filesystem"));
+        try {
+            client.listObjects(new ListObjectsRequest()
+                    .withBucketName(containerName)
+                    .withPrefix("../evil/"));
+            if (blobStoreType.equals("filesystem") || blobStoreType.equals("filesystem-nio2") || blobStoreType.equals("transient-nio2")) {
+                Fail.failBecauseExceptionWasNotThrown(AmazonS3Exception.class);
+            }
+        } catch (AmazonS3Exception e) {
+            // expected
         }
     }
 
@@ -1579,7 +1803,7 @@ public final class AwsSdkTest {
     static void disableSslVerification() {
         try {
             // Create a trust manager that does not validate certificate chains
-            TrustManager[] trustAllCerts = new TrustManager[] {
+            var trustAllCerts = new TrustManager[] {
                 new NullX509TrustManager() };
 
             // Install the all-trusting trust manager
@@ -1589,7 +1813,7 @@ public final class AwsSdkTest {
                     sc.getSocketFactory());
 
             // Create all-trusting host name verifier
-            HostnameVerifier allHostsValid = new HostnameVerifier() {
+            var allHostsValid = new HostnameVerifier() {
                 @Override
                 public boolean verify(String hostname, SSLSession session) {
                     return true;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2021 Andrew Gaul <andrew@gaul.org>
+ * Copyright 2014-2025 Andrew Gaul <andrew@gaul.org>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,7 +38,6 @@ import java.util.Base64;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -49,6 +48,7 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import javax.annotation.Nullable;
 import javax.crypto.Mac;
@@ -65,7 +65,6 @@ import com.google.common.base.Strings;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Streams;
 import com.google.common.escape.Escaper;
@@ -83,7 +82,7 @@ import com.google.common.net.PercentEscaper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
-import org.apache.commons.fileupload.MultipartStream;
+import org.apache.commons.fileupload2.core.MultipartInput;
 import org.jclouds.blobstore.BlobStore;
 import org.jclouds.blobstore.KeyNotFoundException;
 import org.jclouds.blobstore.domain.Blob;
@@ -142,7 +141,7 @@ public class S3ProxyHandler {
                     .or(CharMatcher.is('-'));
     private static final long MAX_MULTIPART_COPY_SIZE =
             5L * 1024L * 1024L * 1024L;
-    private static final Set<String> UNSUPPORTED_PARAMETERS = ImmutableSet.of(
+    private static final Set<String> UNSUPPORTED_PARAMETERS = Set.of(
             "accelerate",
             "analytics",
             "cors",
@@ -161,9 +160,11 @@ public class S3ProxyHandler {
             "website"
     );
     /** All supported x-amz- headers, except for x-amz-meta- user metadata. */
-    private static final Set<String> SUPPORTED_X_AMZ_HEADERS = ImmutableSet.of(
+    private static final Set<String> SUPPORTED_X_AMZ_HEADERS = Set.of(
             AwsHttpHeaders.ACL,
             AwsHttpHeaders.API_VERSION,
+            AwsHttpHeaders.CHECKSUM_ALGORITHM,  // TODO: ignoring header
+            AwsHttpHeaders.CHECKSUM_CRC64NVME,  // TODO: ignoring header
             AwsHttpHeaders.CONTENT_SHA256,
             AwsHttpHeaders.COPY_SOURCE,
             AwsHttpHeaders.COPY_SOURCE_IF_MATCH,
@@ -174,9 +175,11 @@ public class S3ProxyHandler {
             AwsHttpHeaders.DATE,
             AwsHttpHeaders.DECODED_CONTENT_LENGTH,
             AwsHttpHeaders.METADATA_DIRECTIVE,
-            AwsHttpHeaders.STORAGE_CLASS
+            AwsHttpHeaders.STORAGE_CLASS,
+            AwsHttpHeaders.TRANSFER_ENCODING,  // TODO: ignoring header
+            AwsHttpHeaders.USER_AGENT
     );
-    private static final Set<String> CANNED_ACLS = ImmutableSet.of(
+    private static final Set<String> CANNED_ACLS = Set.of(
             "private",
             "public-read",
             "public-read-write",
@@ -242,7 +245,7 @@ public class S3ProxyHandler {
                     if (!identity.equals(identityArg)) {
                         return null;
                     }
-                    return Maps.immutableEntry(credential, blobStore);
+                    return Map.entry(credential, blobStore);
                 }
             };
         } else {
@@ -447,9 +450,6 @@ public class S3ProxyHandler {
                     dateSkew = parseIso8601(request.getHeader(
                             AwsHttpHeaders.DATE));
                 }
-            } else if (request.getParameter("X-Amz-Date") != null) { // v4 query
-                String dateString = request.getParameter("X-Amz-Date");
-                dateSkew = parseIso8601(dateString);
             } else if (hasDateHeader) {
                 try {
                     dateSkew = request.getDateHeader(HttpHeaders.DATE);
@@ -466,7 +466,7 @@ public class S3ProxyHandler {
                 haveDate = false;
             }
             if (haveDate) {
-                isTimeSkewed(dateSkew);
+                isTimeSkewed(dateSkew, presignedUrl);
             }
         }
 
@@ -579,8 +579,8 @@ public class S3ProxyHandler {
                     } else {
                         // buffer the entire stream to calculate digest
                         // why input stream read contentlength of header?
-                        payload = ByteStreams.toByteArray(ByteStreams.limit(
-                                is, v4MaxNonChunkedRequestSize + 1));
+                        payload = ByteStreams.limit(is, v4MaxNonChunkedRequestSize + 1)
+                                .readAllBytes();
                         if (payload.length == v4MaxNonChunkedRequestSize + 1) {
                             throw new S3Exception(
                                     S3ErrorCode.MAX_MESSAGE_LENGTH_EXCEEDED);
@@ -946,7 +946,7 @@ public class S3ProxyHandler {
             return;
         }
 
-        PushbackInputStream pis = new PushbackInputStream(is);
+        var pis = new PushbackInputStream(is);
         int ch = pis.read();
         if (ch != -1) {
             pis.unread(ch);
@@ -1047,7 +1047,7 @@ public class S3ProxyHandler {
             return;
         }
 
-        PushbackInputStream pis = new PushbackInputStream(is);
+        var pis = new PushbackInputStream(is);
         int ch = pis.read();
         if (ch != -1) {
             pis.unread(ch);
@@ -1312,7 +1312,7 @@ public class S3ProxyHandler {
         }
         logger.debug("Creating bucket with location: {}", location);
 
-        CreateContainerOptions options = new CreateContainerOptions();
+        var options = new CreateContainerOptions();
         String acl = request.getHeader(AwsHttpHeaders.ACL);
         if ("public-read".equalsIgnoreCase(acl)) {
             options.publicRead();
@@ -1332,7 +1332,7 @@ public class S3ProxyHandler {
         if (!created) {
             throw new S3Exception(S3ErrorCode.BUCKET_ALREADY_OWNED_BY_YOU,
                     S3ErrorCode.BUCKET_ALREADY_OWNED_BY_YOU.getMessage(),
-                    null, ImmutableMap.of("BucketName", containerName));
+                    null, Map.of("BucketName", containerName));
         }
 
         response.addHeader(HttpHeaders.LOCATION, "/" + containerName);
@@ -1368,7 +1368,7 @@ public class S3ProxyHandler {
             HttpServletResponse response, BlobStore blobStore,
             String containerName) throws IOException, S3Exception {
         String blobStoreType = getBlobStoreType(blobStore);
-        ListContainerOptions options = new ListContainerOptions();
+        var options = new ListContainerOptions();
         String encodingType = request.getParameter("encoding-type");
         String delimiter = request.getParameter("delimiter");
         if (delimiter != null) {
@@ -1404,7 +1404,7 @@ public class S3ProxyHandler {
         if (marker != null) {
             if (Quirks.OPAQUE_MARKERS.contains(blobStoreType)) {
                 String realMarker = lastKeyToMarker.getIfPresent(
-                        Maps.immutableEntry(containerName, marker));
+                        Map.entry(containerName, marker));
                 if (realMarker != null) {
                     marker = realMarker;
                 }
@@ -1498,7 +1498,7 @@ public class S3ProxyHandler {
                     StorageMetadata sm = Streams.findLast(
                             set.stream()).orElse(null);
                     if (sm != null) {
-                        lastKeyToMarker.put(Maps.immutableEntry(
+                        lastKeyToMarker.put(Map.entry(
                                 containerName,
                                 encodeBlob(encodingType, nextMarker)),
                                 nextMarker);
@@ -1590,6 +1590,10 @@ public class S3ProxyHandler {
                 is, DeleteMultipleObjectsRequest.class);
         if (dmor.objects == null) {
             throw new S3Exception(S3ErrorCode.MALFORMED_X_M_L);
+        }
+
+        if (dmor.objects.size() > 1_000) {
+            throw new S3Exception(S3ErrorCode.INVALID_ARGUMENT);
         }
 
         Collection<String> blobNames = new ArrayList<>();
@@ -1716,6 +1720,12 @@ public class S3ProxyHandler {
         response.addHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS,
                 corsRules.getAllowedMethods());
 
+        String exposedHeaders = corsRules.getExposedHeaders();
+        if (!Strings.isNullOrEmpty(exposedHeaders)) {
+            response.addHeader(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS,
+                exposedHeaders);
+        }
+
         response.setStatus(HttpServletResponse.SC_OK);
     }
 
@@ -1724,7 +1734,7 @@ public class S3ProxyHandler {
             String containerName, String blobName)
             throws IOException, S3Exception {
         int status = HttpServletResponse.SC_OK;
-        GetOptions options = new GetOptions();
+        var options = new GetOptions();
 
         String ifMatch = request.getHeader(HttpHeaders.IF_MATCH);
         if (ifMatch != null) {
@@ -1775,9 +1785,12 @@ public class S3ProxyHandler {
         addCorsResponseHeader(request, response);
 
         addMetadataToResponse(request, response, blob.getMetadata());
+
         // TODO: handles only a single range due to jclouds limitations
+        var headers = new CaseInsensitiveImmutableMultimap(
+                blob.getAllHeaders());
         Collection<String> contentRanges =
-                blob.getAllHeaders().get(HttpHeaders.CONTENT_RANGE);
+                headers.get(HttpHeaders.CONTENT_RANGE);
         if (!contentRanges.isEmpty()) {
             response.addHeader(HttpHeaders.CONTENT_RANGE,
                     contentRanges.iterator().next());
@@ -1843,8 +1856,7 @@ public class S3ProxyHandler {
         if (replaceMetadata) {
             ContentMetadataBuilder contentMetadata =
                     ContentMetadataBuilder.create();
-            ImmutableMap.Builder<String, String> userMetadata =
-                    ImmutableMap.builder();
+            var userMetadata = ImmutableMap.<String, String>builder();
             for (String headerName : Collections.list(
                     request.getHeaderNames())) {
                 String headerValue = Strings.nullToEmpty(request.getHeader(
@@ -1904,8 +1916,12 @@ public class S3ProxyHandler {
             xml.writeStartElement("CopyObjectResult");
             xml.writeDefaultNamespace(AWS_XMLNS);
 
-            writeSimpleElement(xml, "LastModified",
-                    formatDate(blobMetadata.getLastModified()));
+            var lastModified = blobMetadata.getLastModified();
+            if (lastModified != null) {
+                writeSimpleElement(xml, "LastModified",
+                        formatDate(lastModified));
+            }
+
             writeSimpleElement(xml, "ETag", maybeQuoteETag(eTag));
 
             xml.writeEndElement();
@@ -1982,7 +1998,7 @@ public class S3ProxyHandler {
             return;
         }
 
-        PutOptions options = new PutOptions().setBlobAccess(access);
+        var options = new PutOptions().setBlobAccess(access);
 
         String blobStoreType = getBlobStoreType(blobStore);
         if (blobStoreType.equals("azureblob") &&
@@ -2037,8 +2053,10 @@ public class S3ProxyHandler {
         String signature = null;
         String algorithm = null;
         byte[] payload = null;
-        MultipartStream multipartStream = new MultipartStream(is,
-                boundary.getBytes(StandardCharsets.UTF_8), 4096, null);
+        var multipartStream = MultipartInput.builder()
+                .setBoundary(boundary.getBytes(StandardCharsets.UTF_8))
+                .setInputStream(is)
+                .get();
         boolean nextPart = multipartStream.skipPreamble();
         while (nextPart) {
             String header = multipartStream.readHeaders();
@@ -2213,7 +2231,7 @@ public class S3ProxyHandler {
             response.sendError(HttpServletResponse.SC_BAD_REQUEST);
             return;
         }
-        PutOptions options = new PutOptions().setBlobAccess(access);
+        var options = new PutOptions().setBlobAccess(access);
 
         MultipartUpload mpu = blobStore.initiateMultipartUpload(containerName,
                 builder.build().getMetadata(), options);
@@ -2264,17 +2282,11 @@ public class S3ProxyHandler {
         final MultipartUpload mpu = MultipartUpload.create(containerName,
                 blobName, uploadId, metadata, options);
 
-        // List parts to get part sizes and to map multiple Azure parts
-        // into single parts.
-        ImmutableMap.Builder<Integer, MultipartPart> builder =
-                ImmutableMap.builder();
-        for (MultipartPart part : blobStore.listMultipartUpload(mpu)) {
-            builder.put(part.partNumber(), part);
-        }
 
         final List<MultipartPart> parts = new ArrayList<>();
         String blobStoreType = getBlobStoreType(blobStore);
-        if (blobStoreType.equals("azureblob")) {
+        if (blobStoreType.equals("azureblob") ||
+                blobStoreType.equals("azureblob-sdk")) {
             // TODO: how to sanity check parts?
             for (MultipartPart part : blobStore.listMultipartUpload(mpu)) {
                 parts.add(part);
@@ -2302,6 +2314,13 @@ public class S3ProxyHandler {
                         partNumber, partSize, eTag, /*lastModified=*/ null));
             }
         } else {
+            // List parts to get part sizes and to map multiple Azure parts
+            // into single parts.
+            var partsByListing =
+                blobStore.listMultipartUpload(mpu).stream().collect(
+                        Collectors.toMap(
+                                part -> part.partNumber(),
+                                part -> part));
             CompleteMultipartUploadRequest cmu;
             try {
                 cmu = mapper.readValue(
@@ -2318,11 +2337,8 @@ public class S3ProxyHandler {
                 }
             }
 
-            ImmutableMap<Integer, MultipartPart> partsByListing =
-                    builder.build();
-            for (Iterator<Map.Entry<Integer, String>> it =
-                    requestParts.entrySet().iterator(); it.hasNext();) {
-                Map.Entry<Integer, String> entry = it.next();
+            for (var it = requestParts.entrySet().iterator(); it.hasNext();) {
+                var entry = it.next();
                 MultipartPart part = partsByListing.get(entry.getKey());
                 if (part == null) {
                     throw new S3Exception(S3ErrorCode.INVALID_PART);
@@ -2359,7 +2375,7 @@ public class S3ProxyHandler {
             final AtomicReference<String> eTag = new AtomicReference<>();
             final AtomicReference<RuntimeException> exception =
                     new AtomicReference<>();
-            Thread thread = new Thread() {
+            var thread = new Thread() {
                 @Override
                 public void run() {
                     try {
@@ -2455,7 +2471,9 @@ public class S3ProxyHandler {
                 new PutOptions());
 
         List<MultipartPart> parts;
-        if (getBlobStoreType(blobStore).equals("azureblob")) {
+        var blobStoreType = getBlobStoreType(blobStore);
+        if (blobStoreType.equals("azureblob") ||
+                blobStoreType.equals("azureblob-sdk")) {
             // map Azure subparts back into S3 parts
             SortedMap<Integer, Long> map = new TreeMap<>();
             for (MultipartPart part : blobStore.listMultipartUpload(mpu)) {
@@ -2465,7 +2483,7 @@ public class S3ProxyHandler {
                         (size == null ? 0L : (long) size) + part.partSize());
             }
             parts = new ArrayList<>();
-            for (Map.Entry<Integer, Long> entry : map.entrySet()) {
+            for (var entry : map.entrySet()) {
                 String eTag = "";  // TODO: bogus value
                 Date lastModified = null;  // TODO: bogus value
                 parts.add(MultipartPart.create(entry.getKey(),
@@ -2557,7 +2575,7 @@ public class S3ProxyHandler {
         String sourceContainerName = path[0];
         String sourceBlobName = path[1];
 
-        GetOptions options = new GetOptions();
+        var options = new GetOptions();
         String range = request.getHeader(AwsHttpHeaders.COPY_SOURCE_RANGE);
         long expectedSize = -1;
         if (range != null) {
@@ -2606,14 +2624,14 @@ public class S3ProxyHandler {
         } catch (NumberFormatException nfe) {
             throw new S3Exception(S3ErrorCode.INVALID_ARGUMENT,
                     "Part number must be an integer between 1 and 10000" +
-                    ", inclusive", nfe, ImmutableMap.of(
+                    ", inclusive", nfe, Map.of(
                             "ArgumentName", "partNumber",
                             "ArgumentValue", partNumberString));
         }
         if (partNumber < 1 || partNumber > 10_000) {
             throw new S3Exception(S3ErrorCode.INVALID_ARGUMENT,
                     "Part number must be an integer between 1 and 10000" +
-                    ", inclusive", (Throwable) null, ImmutableMap.of(
+                    ", inclusive", (Throwable) null, Map.of(
                             "ArgumentName", "partNumber",
                             "ArgumentValue", partNumberString));
         }
@@ -2685,7 +2703,7 @@ public class S3ProxyHandler {
                 // single S3 part multiple Azure parts.
                 long azureMaximumMultipartPartSize =
                         blobStore.getMaximumMultipartPartSize();
-                HashingInputStream his = new HashingInputStream(MD5, is);
+                var his = new HashingInputStream(MD5, is);
                 int subPartNumber = 0;
                 for (long offset = 0; offset < contentLength;
                         offset += azureMaximumMultipartPartSize,
@@ -2721,7 +2739,10 @@ public class S3ProxyHandler {
             xml.writeStartElement("CopyObjectResult");
             xml.writeDefaultNamespace(AWS_XMLNS);
 
-            writeSimpleElement(xml, "LastModified", formatDate(lastModified));
+            if (lastModified != null) {
+                writeSimpleElement(xml, "LastModified",
+                        formatDate(lastModified));
+            }
             if (eTag != null) {
                 writeSimpleElement(xml, "ETag", maybeQuoteETag(eTag));
             }
@@ -2793,14 +2814,14 @@ public class S3ProxyHandler {
         } catch (NumberFormatException nfe) {
             throw new S3Exception(S3ErrorCode.INVALID_ARGUMENT,
                     "Part number must be an integer between 1 and 10000" +
-                    ", inclusive", nfe, ImmutableMap.of(
+                    ", inclusive", nfe, Map.of(
                             "ArgumentName", "partNumber",
                             "ArgumentValue", partNumberString));
         }
         if (partNumber < 1 || partNumber > 10_000) {
             throw new S3Exception(S3ErrorCode.INVALID_ARGUMENT,
                     "Part number must be an integer between 1 and 10000" +
-                    ", inclusive", (Throwable) null, ImmutableMap.of(
+                    ", inclusive", (Throwable) null, Map.of(
                             "ArgumentName", "partNumber",
                             "ArgumentValue", partNumberString));
         }
@@ -2830,7 +2851,7 @@ public class S3ProxyHandler {
             // S3 part multiple Azure parts.
             long azureMaximumMultipartPartSize =
                         blobStore.getMaximumMultipartPartSize();
-            HashingInputStream his = new HashingInputStream(MD5, is);
+            var his = new HashingInputStream(MD5, is);
             int subPartNumber = 0;
             for (long offset = 0; offset < contentLength;
                     offset += azureMaximumMultipartPartSize,
@@ -2918,15 +2939,17 @@ public class S3ProxyHandler {
                 response.addDateHeader(HttpHeaders.EXPIRES, expires.getTime());
             }
         }
-        response.addDateHeader(HttpHeaders.LAST_MODIFIED,
-                metadata.getLastModified().getTime());
+        Date lastModified = metadata.getLastModified();
+        if (lastModified != null) {
+            response.addDateHeader(HttpHeaders.LAST_MODIFIED,
+                    lastModified.getTime());
+        }
         Tier tier = metadata.getTier();
         if (tier != null) {
             response.addHeader(AwsHttpHeaders.STORAGE_CLASS,
                     StorageClass.fromTier(tier).toString());
         }
-        for (Map.Entry<String, String> entry :
-                metadata.getUserMetadata().entrySet()) {
+        for (var entry : metadata.getUserMetadata().entrySet()) {
             response.addHeader(USER_METADATA_PREFIX + entry.getKey(),
                     entry.getValue());
         }
@@ -2934,7 +2957,7 @@ public class S3ProxyHandler {
 
     /** Parse ISO 8601 timestamp into seconds since 1970. */
     private static long parseIso8601(String date) {
-        SimpleDateFormat formatter = new SimpleDateFormat(
+        var formatter = new SimpleDateFormat(
                 "yyyyMMdd'T'HHmmss'Z'");
         formatter.setTimeZone(TimeZone.getTimeZone("UTC"));
         try {
@@ -2944,21 +2967,29 @@ public class S3ProxyHandler {
         }
     }
 
-    private void isTimeSkewed(long date) throws S3Exception  {
+    private void isTimeSkewed(
+            long date, boolean isPresigned) throws S3Exception  {
         if (date < 0) {
             throw new S3Exception(S3ErrorCode.ACCESS_DENIED);
         }
         long now = System.currentTimeMillis() / 1000;
-        if (now + maximumTimeSkew < date || now - maximumTimeSkew > date) {
-            logger.debug("time skewed {} {}", date, now);
-            throw new S3Exception(S3ErrorCode.REQUEST_TIME_TOO_SKEWED);
+        if (isPresigned) {
+            if (now + maximumTimeSkew < date) {
+                logger.debug("request is not valid yet {} {}", date, now);
+                throw new S3Exception(S3ErrorCode.ACCESS_DENIED);
+            }
+        } else {
+            if (now + maximumTimeSkew < date || now - maximumTimeSkew > date) {
+                logger.debug("time skewed {} {}", date, now);
+                throw new S3Exception(S3ErrorCode.REQUEST_TIME_TOO_SKEWED);
+            }
         }
     }
 
     // cannot call BlobStore.getContext().utils().date().iso8601DateFormatsince
     // it has unwanted millisecond precision
     private static String formatDate(Date date) {
-        SimpleDateFormat formatter = new SimpleDateFormat(
+        var formatter = new SimpleDateFormat(
                 "yyyy-MM-dd'T'HH:mm:ss'Z'");
         formatter.setTimeZone(TimeZone.getTimeZone("GMT"));
         return formatter.format(date);
@@ -2994,7 +3025,7 @@ public class S3ProxyHandler {
             writeSimpleElement(xml, "Code", code.getErrorCode());
             writeSimpleElement(xml, "Message", message);
 
-            for (Map.Entry<String, String> entry : elements.entrySet()) {
+            for (var entry : elements.entrySet()) {
                 writeSimpleElement(xml, entry.getKey(), entry.getValue());
             }
 
@@ -3016,6 +3047,8 @@ public class S3ProxyHandler {
                     corsRules.getAllowedOrigin(corsOrigin));
             response.addHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS,
                     corsRules.getAllowedMethods());
+            response.addHeader(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS,
+                    corsRules.getExposedHeaders());
             if (corsRules.isAllowCredentials()) {
                 response.addHeader(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS,
                         "true");
@@ -3026,8 +3059,7 @@ public class S3ProxyHandler {
     private static void addContentMetdataFromHttpRequest(
             BlobBuilder.PayloadBlobBuilder builder,
             HttpServletRequest request) {
-        ImmutableMap.Builder<String, String> userMetadata =
-                ImmutableMap.builder();
+        var userMetadata = ImmutableMap.<String, String>builder();
         for (String headerName : Collections.list(request.getHeaderNames())) {
             if (startsWithIgnoreCase(headerName, USER_METADATA_PREFIX)) {
                 userMetadata.put(

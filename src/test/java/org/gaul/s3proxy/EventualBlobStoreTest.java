@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2021 Andrew Gaul <andrew@gaul.org>
+ * Copyright 2014-2025 Andrew Gaul <andrew@gaul.org>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,16 +20,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.io.ByteSource;
 import com.google.common.net.MediaType;
-import com.google.inject.Module;
 
 import org.jclouds.ContextBuilder;
 import org.jclouds.blobstore.BlobStore;
@@ -65,7 +64,7 @@ public final class EventualBlobStoreTest {
         nearContext = ContextBuilder
                 .newBuilder("transient")
                 .credentials("identity", "credential")
-                .modules(ImmutableList.<Module>of(new SLF4JLoggingModule()))
+                .modules(List.of(new SLF4JLoggingModule()))
                 .build(BlobStoreContext.class);
         nearBlobStore = nearContext.getBlobStore();
         nearBlobStore.createContainerInLocation(null, containerName);
@@ -73,7 +72,7 @@ public final class EventualBlobStoreTest {
         farContext = ContextBuilder
                 .newBuilder("transient")
                 .credentials("identity", "credential")
-                .modules(ImmutableList.<Module>of(new SLF4JLoggingModule()))
+                .modules(List.of(new SLF4JLoggingModule()))
                 .build(BlobStoreContext.class);
         farBlobStore = farContext.getBlobStore();
         farBlobStore.createContainerInLocation(null, containerName);
@@ -162,7 +161,7 @@ public final class EventualBlobStoreTest {
                 containerName, blob.getMetadata(), new PutOptions());
         MultipartPart part = eventualBlobStore.uploadMultipartPart(mpu,
                 /*partNumber=*/ 1, blob.getPayload());
-        eventualBlobStore.completeMultipartUpload(mpu, ImmutableList.of(part));
+        eventualBlobStore.completeMultipartUpload(mpu, List.of(part));
         assertThat(eventualBlobStore.getBlob(containerName, blobName))
                 .isNull();
         delay();
@@ -196,7 +195,7 @@ public final class EventualBlobStoreTest {
                 .contentLength(BYTE_SOURCE.size())
                 .contentType(MediaType.MP4_AUDIO)
                 .contentMD5(BYTE_SOURCE.hash(TestUtils.MD5))
-                .userMetadata(ImmutableMap.of("key", "value"))
+                .userMetadata(Map.of("key", "value"))
                 .build();
     }
 
@@ -215,11 +214,11 @@ public final class EventualBlobStoreTest {
                 .isEqualTo(MediaType.MP4_AUDIO.toString());
 
         assertThat(blob.getMetadata().getUserMetadata())
-                .isEqualTo(ImmutableMap.of("key", "value"));
+                .isEqualTo(Map.of("key", "value"));
 
         try (InputStream actual = blob.getPayload().openStream();
                 InputStream expected = BYTE_SOURCE.openStream()) {
-            assertThat(actual).hasContentEqualTo(expected);
+            assertThat(actual).hasSameContentAs(expected);
         }
     }
 

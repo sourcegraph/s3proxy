@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2021 Andrew Gaul <andrew@gaul.org>
+ * Copyright 2014-2025 Andrew Gaul <andrew@gaul.org>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,8 @@ import java.nio.file.FileSystems;
 import java.nio.file.PathMatcher;
 import java.util.Map;
 
+import javax.annotation.Nullable;
+
 import com.google.common.collect.Maps;
 
 import org.jclouds.blobstore.BlobStore;
@@ -37,13 +39,12 @@ public final class GlobBlobStoreLocator implements BlobStoreLocator {
 
     @Override
     public Map.Entry<String, BlobStore> locateBlobStore(
-            String identity, String container, String blob) {
+            @Nullable String identity, String container, String blob) {
         Map.Entry<String, BlobStore> locatorEntry =
                 locator.get(identity);
         Map.Entry<String, BlobStore> globEntry = null;
         if (container != null) {
-            for (Map.Entry<PathMatcher, Map.Entry<String, BlobStore>>
-                    entry : globLocator.entrySet()) {
+            for (var entry : globLocator.entrySet()) {
                 if (entry.getKey().matches(FileSystems.getDefault()
                         .getPath(container))) {
                     globEntry = entry.getValue();
@@ -71,7 +72,6 @@ public final class GlobBlobStoreLocator implements BlobStoreLocator {
         if (locatorEntry == null) {
             return null;
         }
-        return Maps.immutableEntry(locatorEntry.getKey(),
-                globEntry.getValue());
+        return Map.entry(locatorEntry.getKey(), globEntry.getValue());
     }
 }

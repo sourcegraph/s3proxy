@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2021 Andrew Gaul <andrew@gaul.org>
+ * Copyright 2014-2025 Andrew Gaul <andrew@gaul.org>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,8 @@ import java.net.URISyntaxException;
 import java.util.Collection;
 import java.util.Objects;
 import java.util.Properties;
+
+import javax.net.ssl.SSLContext;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;
@@ -67,28 +69,30 @@ public final class S3Proxy {
             checkArgument(builder.secureEndpoint.getPath().isEmpty(),
                     "secure-endpoint path must be empty, was: %s",
                     builder.secureEndpoint.getPath());
-            requireNonNull(builder.keyStorePath,
-                    "Must provide keyStorePath with HTTPS endpoint");
-            requireNonNull(builder.keyStorePassword,
-                    "Must provide keyStorePassword with HTTPS endpoint");
+            if (builder.sslContext == null) {
+                requireNonNull(builder.keyStorePath,
+                        "Must provide keyStorePath with HTTPS endpoint");
+                requireNonNull(builder.keyStorePassword,
+                        "Must provide keyStorePassword with HTTPS endpoint");
+            }
         }
         checkArgument(Strings.isNullOrEmpty(builder.identity) ^
                 !Strings.isNullOrEmpty(builder.credential),
                 "Must provide both identity and credential");
 
-        QueuedThreadPool pool = new QueuedThreadPool(builder.jettyMaxThreads);
+        var pool = new QueuedThreadPool(builder.jettyMaxThreads);
         pool.setName("S3Proxy-Jetty");
         server = new Server(pool);
 
         if (builder.servicePath != null && !builder.servicePath.isEmpty()) {
-            ContextHandler context = new ContextHandler();
+            var context = new ContextHandler();
             context.setContextPath(builder.servicePath);
         }
 
-        HttpConfiguration httpConfiguration = new HttpConfiguration();
+        var httpConfiguration = new HttpConfiguration();
         httpConfiguration.setHttpCompliance(HttpCompliance.LEGACY);
         httpConfiguration.setUriCompliance(UriCompliance.LEGACY);
-        SecureRequestCustomizer src = new SecureRequestCustomizer();
+        var src = new SecureRequestCustomizer();
         src.setSniHostCheck(false);
         httpConfiguration.addCustomizer(src);
         HttpConnectionFactory httpConnectionFactory =
@@ -107,8 +111,12 @@ public final class S3Proxy {
         if (builder.secureEndpoint != null) {
             SslContextFactory.Server sslContextFactory =
                 new SslContextFactory.Server();
-            sslContextFactory.setKeyStorePath(builder.keyStorePath);
-            sslContextFactory.setKeyStorePassword(builder.keyStorePassword);
+            if (builder.sslContext != null) {
+                sslContextFactory.setSslContext(builder.sslContext);
+            } else {
+                sslContextFactory.setKeyStorePath(builder.keyStorePath);
+                sslContextFactory.setKeyStorePassword(builder.keyStorePassword);
+            }
             connector = new ServerConnector(server, sslContextFactory,
                     httpConnectionFactory);
             connector.setHost(builder.secureEndpoint.getHost());
@@ -137,6 +145,7 @@ public final class S3Proxy {
                 AuthenticationType.NONE;
         private String identity;
         private String credential;
+        private SSLContext sslContext;
         private String keyStorePath;
         private String keyStorePassword;
         private String virtualHost;
@@ -156,7 +165,7 @@ public final class S3Proxy {
 
         public static Builder fromProperties(Properties properties)
                 throws URISyntaxException {
-            Builder builder = new Builder();
+            var builder = new Builder();
 
             String endpoint = properties.getProperty(
                     S3ProxyConstants.PROPERTY_ENDPOINT);
@@ -270,6 +279,8 @@ public final class S3Proxy {
                         S3ProxyConstants.PROPERTY_CORS_ALLOW_METHODS, "");
                 String corsAllowHeaders = properties.getProperty(
                         S3ProxyConstants.PROPERTY_CORS_ALLOW_HEADERS, "");
+                String corsExposedHeaders = properties.getProperty(
+                        S3ProxyConstants.PROPERTY_CORS_EXPOSED_HEADERS, "");
                 String allowCredentials = properties.getProperty(
                         S3ProxyConstants.PROPERTY_CORS_ALLOW_CREDENTIAL, "");
 
@@ -289,9 +300,10 @@ public final class S3Proxy {
                 }
 
                 builder.corsRules(new CrossOriginResourceSharing(
-                        Lists.newArrayList(splitter.split(corsAllowOrigins)),
-                        Lists.newArrayList(splitter.split(corsAllowMethods)),
-                        Lists.newArrayList(splitter.split(corsAllowHeaders)),
+                        splitter.splitToList(corsAllowOrigins),
+                        splitter.splitToList(corsAllowMethods),
+                        splitter.splitToList(corsAllowHeaders),
+                        splitter.splitToList(corsExposedHeaders),
                         allowCredentials));
             }
 
@@ -303,7 +315,7 @@ public final class S3Proxy {
 
             String maximumTimeSkew = properties.getProperty(
                     S3ProxyConstants.PROPERTY_MAXIMUM_TIME_SKEW);
-            if (maximumTimeSkew != null) {
+            if (maximumTimeSkew != null && !maximumTimeSkew.trim().isEmpty()) {
                 builder.maximumTimeSkew(Integer.parseInt(maximumTimeSkew));
             }
 
@@ -335,9 +347,17 @@ public final class S3Proxy {
             return this;
         }
 
+        public Builder sslContext(SSLContext sslContext) {
+            this.sslContext = requireNonNull(sslContext);
+            this.keyStorePath = null;
+            this.keyStorePassword = null;
+            return this;
+        }
+
         public Builder keyStore(String keyStorePath, String keyStorePassword) {
             this.keyStorePath = requireNonNull(keyStorePath);
             this.keyStorePassword = requireNonNull(keyStorePassword);
+            this.sslContext = null;
             return this;
         }
 
@@ -432,6 +452,7 @@ public final class S3Proxy {
             // do not check credentials or storage backend fields
             return Objects.equals(this.endpoint, that.endpoint) &&
                     Objects.equals(this.secureEndpoint, that.secureEndpoint) &&
+                    Objects.equals(this.sslContext, that.sslContext) &&
                     Objects.equals(this.keyStorePath, that.keyStorePath) &&
                     Objects.equals(this.keyStorePassword,
                             that.keyStorePassword) &&
@@ -447,8 +468,8 @@ public final class S3Proxy {
 
         @Override
         public int hashCode() {
-            return Objects.hash(endpoint, secureEndpoint, keyStorePath,
-                    keyStorePassword, virtualHost, servicePath,
+            return Objects.hash(endpoint, secureEndpoint, sslContext,
+                    keyStorePath, keyStorePassword, virtualHost, servicePath,
                     maxSinglePartObjectSize, v4MaxNonChunkedRequestSize,
                     ignoreUnknownHeaders, corsRules);
         }

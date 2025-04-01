@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2021 Andrew Gaul <andrew@gaul.org>
+ * Copyright 2014-2025 Andrew Gaul <andrew@gaul.org>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,11 +21,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.io.ByteSource;
-import com.google.inject.Module;
 
 import org.jclouds.ContextBuilder;
 import org.jclouds.blobstore.BlobStore;
@@ -47,7 +45,7 @@ public final class ShardedBlobStoreTest {
     private BlobStore blobStore;
     private BlobStore shardedBlobStore;
     private List<String> createdContainers;
-    private ImmutableMap<String, String> prefixesMap;
+    private Map<String, String> prefixesMap;
 
     @Before
     public void setUp() {
@@ -57,14 +55,11 @@ public final class ShardedBlobStoreTest {
         context = ContextBuilder
                 .newBuilder("transient")
                 .credentials("identity", "credential")
-                .modules(ImmutableList.<Module>of(new SLF4JLoggingModule()))
+                .modules(List.of(new SLF4JLoggingModule()))
                 .build(BlobStoreContext.class);
         blobStore = context.getBlobStore();
-        ImmutableMap<String, Integer> shardsMap =
-                new ImmutableMap.Builder<String, Integer>()
-                        .put(containerName, shards).build();
-        prefixesMap = new ImmutableMap.Builder<String, String>()
-                .put(containerName, prefix).build();
+        var shardsMap = Map.of(containerName, shards);
+        prefixesMap = Map.of(containerName, prefix);
         shardedBlobStore = ShardedBlobStore.newShardedBlobStore(
                 blobStore, shardsMap, prefixesMap);
         createdContainers = new ArrayList<>();
@@ -139,12 +134,12 @@ public final class ShardedBlobStoreTest {
         blob = shardedBlobStore.getBlob(containerName, blobName);
         try (InputStream actual = blob.getPayload().openStream();
              InputStream expected = content.openStream()) {
-            assertThat(actual).hasContentEqualTo(expected);
+            assertThat(actual).hasSameContentAs(expected);
         }
         blob2 = shardedBlobStore.getBlob(containerName, blobName2);
         try (InputStream actual = blob2.getPayload().openStream();
              InputStream expected = content2.openStream()) {
-            assertThat(actual).hasContentEqualTo(expected);
+            assertThat(actual).hasSameContentAs(expected);
         }
 
         String blobContainer = null;
@@ -192,7 +187,7 @@ public final class ShardedBlobStoreTest {
         blob = blobStore.getBlob(unshardedContainer, blobName);
         try (InputStream actual = blob.getPayload().openStream();
              InputStream expected = content.openStream()) {
-            assertThat(actual).hasContentEqualTo(expected);
+            assertThat(actual).hasSameContentAs(expected);
         }
     }
 
@@ -211,7 +206,7 @@ public final class ShardedBlobStoreTest {
         blob = shardedBlobStore.getBlob(containerName, copyBlobName);
         try (InputStream actual = blob.getPayload().openStream();
              InputStream expected = content.openStream()) {
-            assertThat(actual).hasContentEqualTo(expected);
+            assertThat(actual).hasSameContentAs(expected);
         }
     }
 
@@ -231,7 +226,7 @@ public final class ShardedBlobStoreTest {
         blob = shardedBlobStore.getBlob(containerName, blobName);
         try (InputStream actual = blob.getPayload().openStream();
              InputStream expected = content.openStream()) {
-            assertThat(actual).hasContentEqualTo(expected);
+            assertThat(actual).hasSameContentAs(expected);
         }
     }
 
@@ -251,7 +246,7 @@ public final class ShardedBlobStoreTest {
         blob = shardedBlobStore.getBlob(unshardedContainer, blobName);
         try (InputStream actual = blob.getPayload().openStream();
              InputStream expected = content.openStream()) {
-            assertThat(actual).hasContentEqualTo(expected);
+            assertThat(actual).hasSameContentAs(expected);
         }
     }
 }

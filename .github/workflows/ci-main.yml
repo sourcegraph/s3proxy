@@ -3,6 +3,8 @@ on:
   push:
     branches:
       - "master"
+    tags:
+      - "*"
   pull_request:
     branches:
       - "*"
@@ -13,7 +15,7 @@ env:
 jobs:
   
   meta:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     outputs:
       container_tags: ${{ steps.docker_action_meta.outputs.tags }}
       container_labels: ${{ steps.docker_action_meta.outputs.labels }}
@@ -28,13 +30,13 @@ jobs:
           persist-credentials: false
       - name: Docker meta
         id: docker_action_meta
-        uses: docker/metadata-action@v4.0.1
+        uses: docker/metadata-action@v5.7.0
         with:
           images: |
             name=ghcr.io/${{ github.repository }}/container
             name=andrewgaul/s3proxy,enable=${{ env.dockerhub_publish }}
           flavor: |
-            latest=false
+            latest=auto
           tags: |
             type=sha,format=long
             type=sha
@@ -45,7 +47,7 @@ jobs:
           labels: |
             org.opencontainers.image.licenses=Apache-2.0
   runTests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     needs: [meta]
     steps:
       - uses: actions/checkout@v4
@@ -57,9 +59,9 @@ jobs:
           distribution: "temurin"
           java-version: "11"
           cache: "maven"
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
-          python-version: "3.8"
+          python-version: "3.11"
           cache: "pip"
 
       #Run tests
@@ -72,35 +74,85 @@ jobs:
       - name: Maven Test
         run: |
           mvn test
-      - name: Other Test
+
+      - name: Maven Test with transient-nio2
+        run: |
+          # TODO: run other test classes
+          mvn test -Ds3proxy.test.conf=s3proxy-transient-nio2.conf -Dtest=AwsSdkTest
+
+      - name: Maven Test with filesystem-nio2
+        run: |
+          # TODO: run other test classes
+          mkdir /tmp/blobstore
+          mvn test -Ds3proxy.test.conf=s3proxy-filesystem-nio2.conf -Dtest=AwsSdkTest
+
+      - name: Install Azurite
+        run: npx --yes --loglevel info azurite@3.34 --version
+      - name: Start Azurite
+        shell: bash
+        run: npx --yes azurite@3.34 azurite-blob &
+      - name: Maven Test with Azurite
+        run: |
+          # TODO: run other test classes
+          mvn test -Ds3proxy.test.conf=s3proxy-azurite.conf -Dtest=AwsSdkTest
+
+      - name: Install Minio
+        run: |
+          curl -o minio https://dl.min.io/server/minio/release/linux-$(uname -m | sed -e s/aarch64/arm64/ -e s/x86_64/amd64/)/minio
+          chmod +x minio
+      - name: Start Minio
+        run: |
+          mkdir mnt/
+          MINIO_SERVER_URL=http://127.0.0.1:9000 MINIO_ROOT_USER=remote-identity MINIO_ROOT_PASSWORD=remote-credential ./minio server mnt/ &
+      - name: Maven Test with Minio
+        run: |
+          # TODO: run other test classes
+          mvn test -Ds3proxy.test.conf=s3proxy-minio.conf -Dtest=AwsSdkTest
+
+      - name: Install s3-tests
+        run: |
+          python -m pip install --upgrade pip
+          pip install tox tox-gh-actions
+      - name: Run s3-tests
         run: |
           ./src/test/resources/run-s3-tests.sh
+      - name: Run s3-tests with transient-nio2
+        run: |
+          ./src/test/resources/run-s3-tests.sh s3proxy-transient-nio2.conf
+      - name: Run s3-tests with Azurite
+        run: |
+          ./src/test/resources/run-s3-tests.sh s3proxy-azurite.conf
+          kill $(pidof node)
+      - name: Run s3-tests with Minio
+        run: |
+          ./src/test/resources/run-s3-tests.sh s3proxy-minio.conf
+          kill $(pidof minio)
 
       #Store the target
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v4
         with:
           name: s3proxy
           path: target/s3proxy
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v4
         with:
           name: pom
           path: pom.xml
 
   Containerize:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     needs: [runTests, meta]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4
         with:
           name: s3proxy
           path: target
-      - uses: actions/download-artifact@v2
+      - uses: actions/download-artifact@v4
         with:
           name: pom
           path: .
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v2
+        uses: docker/setup-qemu-action@v3
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -120,7 +172,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64,linux/arm/v7

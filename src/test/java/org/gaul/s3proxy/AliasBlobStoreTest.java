@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2021 Andrew Gaul <andrew@gaul.org>
+ * Copyright 2014-2025 Andrew Gaul <andrew@gaul.org>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,7 +29,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.hash.HashCode;
 import com.google.common.hash.Hashing;
 import com.google.common.io.ByteSource;
-import com.google.inject.Module;
 
 import org.assertj.core.api.Assertions;
 import org.jclouds.ContextBuilder;
@@ -63,11 +62,10 @@ public final class AliasBlobStoreTest {
         context = ContextBuilder
                 .newBuilder("transient")
                 .credentials("identity", "credential")
-                .modules(ImmutableList.<Module>of(new SLF4JLoggingModule()))
+                .modules(List.of(new SLF4JLoggingModule()))
                 .build(BlobStoreContext.class);
         blobStore = context.getBlobStore();
-        ImmutableBiMap.Builder<String, String> aliasesBuilder =
-                new ImmutableBiMap.Builder<>();
+        var aliasesBuilder = new ImmutableBiMap.Builder<String, String>();
         aliasesBuilder.put(aliasContainerName, containerName);
         aliasBlobStore = AliasBlobStore.newAliasBlobStore(
                 blobStore, aliasesBuilder.build());
@@ -134,7 +132,7 @@ public final class AliasBlobStoreTest {
         blob = aliasBlobStore.getBlob(aliasContainerName, blobName);
         try (InputStream actual = blob.getPayload().openStream();
              InputStream expected = content.openStream()) {
-            assertThat(actual).hasContentEqualTo(expected);
+            assertThat(actual).hasSameContentAs(expected);
         }
     }
 
@@ -152,8 +150,7 @@ public final class AliasBlobStoreTest {
         MultipartPart part = aliasBlobStore.uploadMultipartPart(
                 mpu, 1, Payloads.newPayload(content));
         assertThat(part.partETag()).isEqualTo(contentHash.toString());
-        ImmutableList.Builder<MultipartPart> parts =
-                new ImmutableList.Builder<>();
+        var parts = new ImmutableList.Builder<MultipartPart>();
         parts.add(part);
         String mpuETag = aliasBlobStore.completeMultipartUpload(mpu,
                 parts.build());
@@ -164,13 +161,13 @@ public final class AliasBlobStoreTest {
         blob = aliasBlobStore.getBlob(aliasContainerName, blobName);
         try (InputStream actual = blob.getPayload().openStream();
              InputStream expected = content.openStream()) {
-            assertThat(actual).hasContentEqualTo(expected);
+            assertThat(actual).hasSameContentAs(expected);
         }
     }
 
     @Test
     public void testParseDuplicateAliases() {
-        Properties properties = new Properties();
+        var properties = new Properties();
         properties.setProperty(String.format("%s.alias",
                 S3ProxyConstants.PROPERTY_ALIAS_BLOBSTORE), "bucket");
         properties.setProperty(String.format("%s.other-alias",

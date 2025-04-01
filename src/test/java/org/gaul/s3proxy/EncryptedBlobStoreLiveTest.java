@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2021 Andrew Gaul <andrew@gaul.org>
+ * Copyright 2014-2025 Andrew Gaul <andrew@gaul.org>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,13 +22,13 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.common.io.ByteSource;
 import com.google.common.util.concurrent.Uninterruptibles;
 
@@ -135,7 +135,7 @@ public final class EncryptedBlobStoreLiveTest extends S3ClientLiveTest {
                 Constants.S3_ENC_SUFFIX);
         }
 
-        ListContainerOptions lco = new ListContainerOptions();
+        var lco = new ListContainerOptions();
         lco.maxResults(1);
         list = view.getBlobStore().list(containerName, lco);
         assertThat(list).hasSize(1);
@@ -155,15 +155,33 @@ public final class EncryptedBlobStoreLiveTest extends S3ClientLiveTest {
         this.getApi().putObject(containerName, object);
 
         // get only 20 bytes
-        GetOptions options = new GetOptions();
+        var options = new GetOptions();
         options.range(0, 19);
         object = this.getApi().getObject(containerName, blobName, options);
 
-        InputStreamReader r =
-            new InputStreamReader(object.getPayload().openStream());
-        BufferedReader reader = new BufferedReader(r);
-        String partialContent = reader.lines().collect(Collectors.joining());
-        assertThat(partialContent).isEqualTo(content.substring(0, 20));
+        var r = new InputStreamReader(
+                object.getPayload().openStream());
+        var reader = new BufferedReader(r);
+        String partialContent = reader.lines()
+                .collect(Collectors.joining());
+
+        assertThat(partialContent).isEqualTo(
+                content.substring(0, 20));
+        assertThat((long) partialContent.length()).isEqualTo(
+                object.getMetadata().getContentMetadata().getContentLength());
+
+        // open ended range request
+        options = new GetOptions();
+        options.startAt(10);
+        object = this.getApi().getObject(containerName, blobName, options);
+
+        r = new InputStreamReader(object.getPayload().openStream());
+        reader = new BufferedReader(r);
+        partialContent = reader.lines().collect(Collectors.joining());
+
+        assertThat(partialContent).isEqualTo(content.substring(10));
+        assertThat((long) partialContent.length()).isEqualTo(
+                object.getMetadata().getContentMetadata().getContentLength());
     }
 
     @Test
@@ -212,12 +230,12 @@ public final class EncryptedBlobStoreLiveTest extends S3ClientLiveTest {
             .uploadPart(containerName, blobName, 3, uploadId, part3);
 
         this.getApi().completeMultipartUpload(containerName, blobName, uploadId,
-            ImmutableMap.of(1, eTagOf1, 2, eTagOf2, 3, eTagOf3));
+            Map.of(1, eTagOf1, 2, eTagOf2, 3, eTagOf3));
         S3Object object = this.getApi().getObject(containerName, blobName);
 
         try (InputStream actual = object.getPayload().openStream();
              InputStream expected = byteSource.openStream()) {
-            assertThat(actual).hasContentEqualTo(expected);
+            assertThat(actual).hasSameContentAs(expected);
         }
 
         // get a 5mb slice that overlap parts
@@ -225,13 +243,13 @@ public final class EncryptedBlobStoreLiveTest extends S3ClientLiveTest {
         ByteSource partialContent =
             byteSource.slice(partialStart, partialStart);
 
-        GetOptions options = new GetOptions();
+        var options = new GetOptions();
         options.range(partialStart, (partialStart * 2) - 1);
         object = this.getApi().getObject(containerName, blobName, options);
 
         try (InputStream actual = object.getPayload().openStream();
              InputStream expected = partialContent.openStream()) {
-            assertThat(actual).hasContentEqualTo(expected);
+            assertThat(actual).hasSameContentAs(expected);
         }
     }
 

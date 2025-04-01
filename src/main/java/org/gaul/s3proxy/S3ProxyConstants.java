@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2021 Andrew Gaul <andrew@gaul.org>
+ * Copyright 2014-2025 Andrew Gaul <andrew@gaul.org>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,6 +40,8 @@ public final class S3ProxyConstants {
             "s3proxy.cors-allow-methods";
     public static final String PROPERTY_CORS_ALLOW_HEADERS =
             "s3proxy.cors-allow-headers";
+    public static final String PROPERTY_CORS_EXPOSED_HEADERS =
+            "s3proxy.cors-exposed-headers";
     public static final String PROPERTY_CORS_ALLOW_CREDENTIAL =
             "s3proxy.cors-allow-credential";
     public static final String PROPERTY_CREDENTIAL =
@@ -111,6 +113,9 @@ public final class S3ProxyConstants {
     /** Shard objects across a specified number of buckets. */
     public static final String PROPERTY_SHARDED_BLOBSTORE =
             "s3proxy.sharded-blobstore";
+    /** Override tier when creating blobs. */
+    public static final String PROPERTY_STORAGE_CLASS_BLOBSTORE =
+            "s3proxy.storage-class-blobstore";
 
     /** Maximum time skew allowed in signed requests. */
     public static final String PROPERTY_MAXIMUM_TIME_SKEW =
@@ -122,6 +127,13 @@ public final class S3ProxyConstants {
             "s3proxy.encrypted-blobstore-password";
     public static final String PROPERTY_ENCRYPTED_BLOBSTORE_SALT =
             "s3proxy.encrypted-blobstore-salt";
+
+    public static final String PROPERTY_USER_METADATA_REPLACER =
+            "s3proxy.user-metadata-replacer-blobstore";
+    public static final String PROPERTY_USER_METADATA_REPLACER_FROM_CHARS =
+            "s3proxy.user-metadata-replacer-blobstore.from-chars";
+    public static final String PROPERTY_USER_METADATA_REPLACER_TO_CHARS =
+            "s3proxy.user-metadata-replacer-blobstore.to-chars";
 
     static final String PROPERTY_ALT_JCLOUDS_PREFIX = "alt.";
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2021 Andrew Gaul <andrew@gaul.org>
+ * Copyright 2014-2025 Andrew Gaul <andrew@gaul.org>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,14 +19,12 @@ package org.gaul.s3proxy.crypto;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.TreeMap;
+import java.util.SortedMap;
 
 import javax.annotation.concurrent.ThreadSafe;
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
 import javax.crypto.ShortBufferException;
-
-import org.apache.commons.io.IOUtils;
 
 @ThreadSafe
 public class DecryptionInputStream extends FilterInputStream {
@@ -38,7 +36,7 @@ public class DecryptionInputStream extends FilterInputStream {
     private final SecretKey key;
 
     // the list of parts we expect in the stream
-    private final TreeMap<Integer, PartPadding> parts;
+    private final SortedMap<Integer, PartPadding> parts;
 
     /* the buffer holding data that have been read in from the
        underlying stream, but have not been processed by the cipher
@@ -77,7 +75,7 @@ public class DecryptionInputStream extends FilterInputStream {
      * @throws IOException if cipher fails
      */
     public DecryptionInputStream(InputStream is, SecretKey key,
-            TreeMap<Integer, PartPadding> parts, int skipParts,
+            SortedMap<Integer, PartPadding> parts, int skipParts,
             long skipPartBytes) throws IOException {
         super(is);
         in = is;
@@ -176,7 +174,8 @@ public class DecryptionInputStream extends FilterInputStream {
                 // update the remaining bytes of the next part
                 partBytesRemain = parts.get(nextPart).getSize();
 
-                IOUtils.skip(in, Constants.PADDING_BLOCK_SIZE);
+                // Cannot call ByteStreams.skipFully since in may be shorter
+                in.readNBytes(Constants.PADDING_BLOCK_SIZE);
 
                 return ofinish;
             } else {

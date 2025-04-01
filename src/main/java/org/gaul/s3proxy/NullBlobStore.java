@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2021 Andrew Gaul <andrew@gaul.org>
+ * Copyright 2014-2025 Andrew Gaul <andrew@gaul.org>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,7 +28,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.hash.HashCode;
 import com.google.common.io.ByteSource;
-import com.google.common.io.ByteStreams;
 import com.google.common.primitives.Longs;
 
 import org.jclouds.blobstore.BlobStore;
@@ -36,7 +35,6 @@ import org.jclouds.blobstore.domain.Blob;
 import org.jclouds.blobstore.domain.BlobMetadata;
 import org.jclouds.blobstore.domain.MultipartPart;
 import org.jclouds.blobstore.domain.MultipartUpload;
-import org.jclouds.blobstore.domain.MutableStorageMetadata;
 import org.jclouds.blobstore.domain.PageSet;
 import org.jclouds.blobstore.domain.StorageMetadata;
 import org.jclouds.blobstore.domain.internal.MutableStorageMetadataImpl;
@@ -82,13 +80,13 @@ final class NullBlobStore extends ForwardingBlobStore {
 
         byte[] array;
         try (InputStream is = blob.getPayload().openStream()) {
-            array = ByteStreams.toByteArray(is);
+            array = is.readAllBytes();
         } catch (IOException ioe) {
             throw new RuntimeException(ioe);
         }
 
         long length = Longs.fromByteArray(array);
-        ByteSourcePayload payload = new ByteSourcePayload(
+        var payload = new ByteSourcePayload(
                 new NullByteSource().slice(0, length));
         payload.setContentMetadata(blob.getPayload().getContentMetadata());
         payload.getContentMetadata().setContentLength(length);
@@ -100,10 +98,10 @@ final class NullBlobStore extends ForwardingBlobStore {
 
     @Override
     public PageSet<? extends StorageMetadata> list(String container) {
-        ImmutableSet.Builder<StorageMetadata> builder = ImmutableSet.builder();
+        var builder = ImmutableSet.<StorageMetadata>builder();
         PageSet<? extends StorageMetadata> pageSet = super.list(container);
         for (StorageMetadata sm : pageSet) {
-            MutableStorageMetadata msm = new MutableStorageMetadataImpl(sm);
+            var msm = new MutableStorageMetadataImpl(sm);
             msm.setSize(0L);
             builder.add(msm);
         }
@@ -126,7 +124,7 @@ final class NullBlobStore extends ForwardingBlobStore {
         }
 
         byte[] array = Longs.toByteArray(length);
-        ByteSourcePayload payload = new ByteSourcePayload(
+        var payload = new ByteSourcePayload(
                 ByteSource.wrap(array));
         payload.setContentMetadata(blob.getPayload().getContentMetadata());
         payload.getContentMetadata().setContentLength((long) array.length);
@@ -147,7 +145,7 @@ final class NullBlobStore extends ForwardingBlobStore {
         }
 
         byte[] array = Longs.toByteArray(length);
-        ByteSourcePayload payload = new ByteSourcePayload(
+        var payload = new ByteSourcePayload(
                 ByteSource.wrap(array));
         payload.getContentMetadata().setContentLength((long) array.length);
 
@@ -158,7 +156,7 @@ final class NullBlobStore extends ForwardingBlobStore {
 
         MultipartPart part = super.uploadMultipartPart(mpu2, 1, payload);
 
-        return super.completeMultipartUpload(mpu2, ImmutableList.of(part));
+        return super.completeMultipartUpload(mpu2, List.of(part));
     }
 
     @Override
@@ -182,7 +180,7 @@ final class NullBlobStore extends ForwardingBlobStore {
         }
 
         byte[] array = Longs.toByteArray(length);
-        ByteSourcePayload newPayload = new ByteSourcePayload(
+        var newPayload = new ByteSourcePayload(
                 ByteSource.wrap(array));
         newPayload.setContentMetadata(payload.getContentMetadata());
         newPayload.getContentMetadata().setContentLength((long) array.length);
@@ -203,7 +201,7 @@ final class NullBlobStore extends ForwardingBlobStore {
 
     @Override
     public List<MultipartPart> listMultipartUpload(MultipartUpload mpu) {
-        ImmutableList.Builder<MultipartPart> builder = ImmutableList.builder();
+        var builder = ImmutableList.<MultipartPart>builder();
         for (MultipartPart part : super.listMultipartUpload(mpu)) {
             // get real blob size from stub blob
             Blob blob = getBlob(mpu.containerName(),

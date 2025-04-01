@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2021 Andrew Gaul <andrew@gaul.org>
+ * Copyright 2014-2025 Andrew Gaul <andrew@gaul.org>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,7 +26,6 @@ import java.util.Base64;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 
@@ -37,7 +36,6 @@ import javax.crypto.spec.SecretKeySpec;
 import com.google.common.base.Joiner;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.SortedSetMultimap;
 import com.google.common.collect.TreeMultimap;
 import com.google.common.io.BaseEncoding;
@@ -54,7 +52,7 @@ final class AwsSignature {
             AwsSignature.class);
     private static final PercentEscaper AWS_URL_PARAMETER_ESCAPER =
             new PercentEscaper("-_.~", false);
-    private static final Set<String> SIGNED_SUBRESOURCES = ImmutableSet.of(
+    private static final Set<String> SIGNED_SUBRESOURCES = Set.of(
             "acl",
             "delete",
             "lifecycle",
@@ -110,7 +108,7 @@ final class AwsSignature {
         }
 
         // Build string to sign
-        StringBuilder builder = new StringBuilder()
+        var builder = new StringBuilder()
                 .append(request.getMethod())
                 .append('\n')
                 .append(Strings.nullToEmpty(request.getHeader(
@@ -143,7 +141,7 @@ final class AwsSignature {
         }
 
         builder.append('\n');
-        for (Map.Entry<String, String> entry : canonicalizedHeaders.entries()) {
+        for (var entry : canonicalizedHeaders.entries()) {
             builder.append(entry.getKey()).append(':')
                     .append(entry.getValue()).append('\n');
         }
@@ -219,7 +217,7 @@ final class AwsSignature {
         }
         Collections.sort(headers);
 
-        StringBuilder headersWithValues = new StringBuilder();
+        var headersWithValues = new StringBuilder();
         boolean firstHeader = true;
         for (String header : headers) {
             if (firstHeader) {

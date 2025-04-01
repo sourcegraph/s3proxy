@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2021 Andrew Gaul <andrew@gaul.org>
+ * Copyright 2014-2025 Andrew Gaul <andrew@gaul.org>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ package org.gaul.s3proxy;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.google.common.collect.Lists;
+import java.util.List;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -34,14 +34,15 @@ public final class CrossOriginResourceSharingRuleTest {
         corsAll = new CrossOriginResourceSharing();
         // CORS Configured
         corsCfg = new CrossOriginResourceSharing(
-                Lists.newArrayList("https://example\\.com",
+                List.of("https://example\\.com",
                         "https://.+\\.example\\.com",
                         "https://example\\.cloud"),
-                Lists.newArrayList("GET", "PUT"),
-                Lists.newArrayList("Accept", "Content-Type"),
+                List.of("GET", "PUT"),
+                List.of("Accept", "Content-Type"),
+                List.of(),
                 "true");
         // CORS disabled
-        corsOff = new CrossOriginResourceSharing(null, null, null, null);
+        corsOff = new CrossOriginResourceSharing(null, null, null, null, null);
     }
 
     @Test

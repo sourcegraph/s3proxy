@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2021 Andrew Gaul <andrew@gaul.org>
+ * Copyright 2014-2025 Andrew Gaul <andrew@gaul.org>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,15 +21,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.AbstractMap.SimpleEntry;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.regex.Pattern;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.hash.Hashing;
 import com.google.common.io.ByteSource;
-import com.google.inject.Module;
 
 import org.assertj.core.api.Assertions;
 import org.jclouds.ContextBuilder;
@@ -54,7 +53,7 @@ public final class RegexBlobStoreTest {
         context = ContextBuilder
                 .newBuilder("transient")
                 .credentials("identity", "credential")
-                .modules(ImmutableList.<Module>of(new SLF4JLoggingModule()))
+                .modules(List.of(new SLF4JLoggingModule()))
                 .build(BlobStoreContext.class);
         delegate = context.getBlobStore();
         delegate.createContainerInLocation(null, containerName);
@@ -71,12 +70,11 @@ public final class RegexBlobStoreTest {
 
     @Test
     public void testRemoveSomeCharsFromName() throws IOException {
-        ImmutableList.Builder<Map.Entry<Pattern, String>> regexBuilder =
-                new ImmutableList.Builder<>();
-        regexBuilder.add(new SimpleEntry<Pattern, String>(Pattern.compile(
-                "[^a-zA-Z0-9/_.]"), "_"));
+        var regexes = List.<Map.Entry<Pattern, String>>of(
+                new SimpleEntry<Pattern, String>(
+                        Pattern.compile("[^a-zA-Z0-9/_.]"), "_"));
         BlobStore regexBlobStore = RegexBlobStore.newRegexBlobStore(delegate,
-                regexBuilder.build());
+                regexes);
 
         String initialBlobName = "test/remove:badchars-folder/blob.txt";
         String targetBlobName = "test/remove_badchars_folder/blob.txt";
@@ -96,19 +94,19 @@ public final class RegexBlobStoreTest {
         blob = regexBlobStore.getBlob(containerName, targetBlobName);
         try (InputStream actual = blob.getPayload().openStream();
              InputStream expected = content.openStream()) {
-            assertThat(actual).hasContentEqualTo(expected);
+            assertThat(actual).hasSameContentAs(expected);
         }
 
         blob = regexBlobStore.getBlob(containerName, initialBlobName);
         try (InputStream actual = blob.getPayload().openStream();
              InputStream expected = content.openStream()) {
-            assertThat(actual).hasContentEqualTo(expected);
+            assertThat(actual).hasSameContentAs(expected);
         }
     }
 
     @Test
     public void testParseMatchWithoutReplace() {
-        Properties properties = new Properties();
+        var properties = new Properties();
         properties.put(
                 String.format("%s.%s.sample1",
                         S3ProxyConstants.PROPERTY_REGEX_BLOBSTORE,

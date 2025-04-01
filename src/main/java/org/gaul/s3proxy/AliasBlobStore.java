@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2021 Andrew Gaul <andrew@gaul.org>
+ * Copyright 2014-2025 Andrew Gaul <andrew@gaul.org>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -135,8 +135,7 @@ public final class AliasBlobStore extends ForwardingBlobStore {
     @Override
     public PageSet<? extends StorageMetadata> list() {
         PageSet<? extends StorageMetadata> upstream = this.delegate().list();
-        ImmutableList.Builder<StorageMetadata> results =
-                new ImmutableList.Builder<>();
+        var results = new ImmutableList.Builder<StorageMetadata>();
         for (StorageMetadata sm : upstream) {
             if (aliases.containsValue(sm.getName())) {
                 MutableStorageMetadata bucketAlias =

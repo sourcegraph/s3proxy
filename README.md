@@ -74,13 +74,16 @@ Maven Central hosts S3Proxy artifacts and the wiki has
 * atmos
 * aws-s3 (Amazon-only)
 * azureblob
+* azureblob-sdk (newer but lacks multi-part upload, see [Azure/azure-sdk-for-java#42603](https://github.com/Azure/azure-sdk-for-java/issues/42603))
 * b2
-* filesystem (on-disk storage)
+* filesystem (on-disk storage, deprecated)
+* filesystem-nio2 (on-disk storage, recommended)
 * google-cloud-storage
 * openstack-swift
 * rackspace-cloudfiles-uk and rackspace-cloudfiles-us
 * s3 (all implementations)
-* transient (in-memory storage)
+* transient (in-memory storage, deprecated)
+* transient-nio2 (in-memory storage, recommended)
 
 See the wiki for [examples of configurations](https://github.com/gaul/s3proxy/wiki/Storage-backend-examples).
 
@@ -107,8 +110,10 @@ S3Proxy can modify its behavior based on middlewares:
 * [eventual consistency modeling](https://github.com/gaul/s3proxy/wiki/Middleware---eventual-consistency)
 * [large object mocking](https://github.com/gaul/s3proxy/wiki/Middleware-large-object-mocking)
 * [read-only](https://github.com/gaul/s3proxy/wiki/Middleware-read-only)
-* [sharded backend containers](https://github.com/gaul/s3proxy/wiki/Middleware-sharded-backend)
 * [regex rename blobs](https://github.com/gaul/s3proxy/wiki/Middleware-regex)
+* [sharded backend containers](https://github.com/gaul/s3proxy/wiki/Middleware-sharded-backend)
+* [storage class override](https://github.com/gaul/s3proxy/wiki/Middleware-storage-class-override)
+* [user metadata replacer](https://github.com/gaul/s3proxy/wiki/Middleware-user-metadata-replacer)
 
 ## SSL Support
 
@@ -164,13 +169,13 @@ for specific storage backends.
 * [Ceph s3-tests](https://github.com/ceph/s3-tests) help maintain and improve compatibility with the S3 API
 * [fake-s3](https://github.com/jubos/fake-s3), [gofakes3](https://github.com/johannesboyne/gofakes3), [minio](https://github.com/minio/minio), [S3 ninja](https://github.com/scireum/s3ninja), and [s3rver](https://github.com/jamhall/s3rver) provide functionality similar to S3Proxy when using the filesystem backend
 * [GlacierProxy](https://github.com/bouncestorage/glacier-proxy) and [SwiftProxy](https://github.com/bouncestorage/swiftproxy) provide similar functionality for the Amazon Glacier and OpenStack Swift APIs
-* [s3mock](https://github.com/findify/s3mock) mocks the S3 API for Java/Scala projects
+* [s3mock](https://github.com/adobe/S3Mock) - Adobe's s3 mock implementation
 * [sbt-s3](https://github.com/localytics/sbt-s3) runs S3Proxy via the Scala Build Tool
 * [swift3](https://github.com/openstack/swift3) provides an S3 middleware for OpenStack Swift
 * [Zenko](https://www.zenko.io/) provide similar multi-cloud functionality
 
 ## License
 
-Copyright (C) 2014-2021 Andrew Gaul
+Copyright (C) 2014-2025 Andrew Gaul
 
 Licensed under the Apache License, Version 2.0

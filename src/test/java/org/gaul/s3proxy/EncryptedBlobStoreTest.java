@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2021 Andrew Gaul <andrew@gaul.org>
+ * Copyright 2014-2025 Andrew Gaul <andrew@gaul.org>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,9 +30,6 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Random;
 import java.util.stream.Collectors;
-
-import com.google.common.collect.ImmutableList;
-import com.google.inject.Module;
 
 import org.gaul.s3proxy.crypto.Constants;
 import org.jclouds.ContextBuilder;
@@ -111,12 +108,12 @@ public final class EncryptedBlobStoreTest {
         context = ContextBuilder
             .newBuilder("transient")
             .credentials("identity", "credential")
-            .modules(ImmutableList.<Module>of(new SLF4JLoggingModule()))
+            .modules(List.of(new SLF4JLoggingModule()))
             .build(BlobStoreContext.class);
         blobStore = context.getBlobStore();
         blobStore.createContainerInLocation(null, containerName);
 
-        Properties properties = new Properties();
+        var properties = new Properties();
         properties.put(S3ProxyConstants.PROPERTY_ENCRYPTED_BLOBSTORE, "true");
         properties.put(S3ProxyConstants.PROPERTY_ENCRYPTED_BLOBSTORE_PASSWORD,
             password);
@@ -150,7 +147,7 @@ public final class EncryptedBlobStoreTest {
     @Test
     public void testBlobNotEncrypted() throws Exception {
 
-        String[] tests = new String[] {
+        var tests = new String[] {
             "1", // only 1 char
             "123456789A12345", // lower then the AES block
             "123456789A1234567", // one byte bigger then the AES block
@@ -170,14 +167,14 @@ public final class EncryptedBlobStoreTest {
             blob = encryptedBlobStore.getBlob(containerName, blobName);
 
             InputStream blobIs = blob.getPayload().openStream();
-            InputStreamReader r = new InputStreamReader(blobIs);
-            BufferedReader reader = new BufferedReader(r);
+            var r = new InputStreamReader(blobIs);
+            var reader = new BufferedReader(r);
             String plaintext = reader.lines().collect(Collectors.joining());
             logger.debug("plaintext {}", plaintext);
 
             assertThat(content).isEqualTo(plaintext);
 
-            GetOptions options = new GetOptions();
+            var options = new GetOptions();
             blob = encryptedBlobStore.getBlob(containerName, blobName, options);
 
             blobIs = blob.getPayload().openStream();
@@ -203,7 +200,7 @@ public final class EncryptedBlobStoreTest {
 
     @Test
     public void testListEncrypted() {
-        String[] contents = new String[] {
+        var contents = new String[] {
             "1", // only 1 char
             "123456789A12345", // lower then the AES block
             "123456789A1234567", // one byte bigger then the AES block
@@ -247,7 +244,7 @@ public final class EncryptedBlobStoreTest {
 
         String blobName = TestUtils.createRandomBlobName();
 
-        String[] contentParts = new String[] {
+        var contentParts = new String[] {
             "123456789A123456123456789B123456123456789C1234",
             "123456789D123456123456789E123456123456789F123456",
             "123456789G123456123456789H123456123456789I123"
@@ -289,7 +286,7 @@ public final class EncryptedBlobStoreTest {
         StorageMetadata metadata = blobs.iterator().next();
         assertThat((long) content.length()).isEqualTo(metadata.getSize());
 
-        ListContainerOptions options = new ListContainerOptions();
+        var options = new ListContainerOptions();
         blobs = encryptedBlobStore.list(containerName, options.withDetails());
         metadata = blobs.iterator().next();
         assertThat((long) content.length()).isEqualTo(metadata.getSize());
@@ -309,7 +306,7 @@ public final class EncryptedBlobStoreTest {
     public void testBlobNotEncryptedRanges() throws Exception {
 
         for (int run = 0; run < 100; run++) {
-            String[] tests = new String[] {
+            var tests = new String[] {
                 "123456789A12345", // lower then the AES block
                 "123456789A1234567", // one byte bigger then the AES block
                 "123456789A123456123456789B123456123456789C" +
@@ -318,14 +315,14 @@ public final class EncryptedBlobStoreTest {
 
             for (String content : tests) {
                 String blobName = TestUtils.createRandomBlobName();
-                Random rand = new Random();
+                var rand = new Random();
 
                 InputStream is = new ByteArrayInputStream(
                     content.getBytes(StandardCharsets.UTF_8));
                 Blob blob = makeBlob(blobStore, blobName, is, content.length());
                 blobStore.putBlob(containerName, blob);
 
-                GetOptions options = new GetOptions();
+                var options = new GetOptions();
                 int offset = rand.nextInt(content.length() - 1);
                 logger.debug("content {} with offset {}", content, offset);
 
@@ -334,8 +331,8 @@ public final class EncryptedBlobStoreTest {
                     options);
 
                 InputStream blobIs = blob.getPayload().openStream();
-                InputStreamReader r = new InputStreamReader(blobIs);
-                BufferedReader reader = new BufferedReader(r);
+                var r = new InputStreamReader(blobIs);
+                var reader = new BufferedReader(r);
                 String plaintext = reader.lines().collect(Collectors.joining());
                 logger.debug("plaintext {} with offset {}", plaintext, offset);
 
@@ -386,7 +383,7 @@ public final class EncryptedBlobStoreTest {
 
     @Test
     public void testEncryptContent() throws Exception {
-        String[] tests = new String[] {
+        var tests = new String[] {
             "1", // only 1 char
             "123456789A12345", // lower then the AES block
             "123456789A1234567", // one byte bigger then the AES block
@@ -406,8 +403,8 @@ public final class EncryptedBlobStoreTest {
             blob = encryptedBlobStore.getBlob(containerName, blobName);
 
             InputStream blobIs = blob.getPayload().openStream();
-            InputStreamReader r = new InputStreamReader(blobIs);
-            BufferedReader reader = new BufferedReader(r);
+            var r = new InputStreamReader(blobIs);
+            var reader = new BufferedReader(r);
             String plaintext = reader.lines().collect(Collectors.joining());
             logger.debug("plaintext {}", plaintext);
 
@@ -439,7 +436,7 @@ public final class EncryptedBlobStoreTest {
 
     @Test
     public void testEncryptContentWithOptions() throws Exception {
-        String[] tests = new String[] {
+        var tests = new String[] {
             "1", // only 1 char
             "123456789A12345", // lower then the AES block
             "123456789A1234567", // one byte bigger then the AES block
@@ -454,14 +451,14 @@ public final class EncryptedBlobStoreTest {
                 content.getBytes(StandardCharsets.UTF_8));
             Blob blob = makeBlobWithContentType(encryptedBlobStore, blobName,
                 content.length(), is, contentType);
-            PutOptions options = new PutOptions();
+            var options = new PutOptions();
             encryptedBlobStore.putBlob(containerName, blob, options);
 
             blob = encryptedBlobStore.getBlob(containerName, blobName);
 
             InputStream blobIs = blob.getPayload().openStream();
-            InputStreamReader r = new InputStreamReader(blobIs);
-            BufferedReader reader = new BufferedReader(r);
+            var r = new InputStreamReader(blobIs);
+            var reader = new BufferedReader(r);
             String plaintext = reader.lines().collect(Collectors.joining());
             logger.debug("plaintext {}", plaintext);
 
@@ -546,8 +543,8 @@ public final class EncryptedBlobStoreTest {
         Blob blob = encryptedBlobStore.getBlob(containerName, blobName);
 
         InputStream blobIs = blob.getPayload().openStream();
-        InputStreamReader r = new InputStreamReader(blobIs);
-        BufferedReader reader = new BufferedReader(r);
+        var r = new InputStreamReader(blobIs);
+        var reader = new BufferedReader(r);
         String plaintext = reader.lines().collect(Collectors.joining());
         logger.debug("plaintext {}", plaintext);
         assertThat(plaintext).isEqualTo(content);
@@ -580,13 +577,13 @@ public final class EncryptedBlobStoreTest {
                 makeBlob(encryptedBlobStore, blobName, is, content.length());
             encryptedBlobStore.putBlob(containerName, blob);
 
-            GetOptions options = new GetOptions();
+            var options = new GetOptions();
             options.startAt(offset);
             blob = encryptedBlobStore.getBlob(containerName, blobName, options);
 
             InputStream blobIs = blob.getPayload().openStream();
-            InputStreamReader r = new InputStreamReader(blobIs);
-            BufferedReader reader = new BufferedReader(r);
+            var r = new InputStreamReader(blobIs);
+            var reader = new BufferedReader(r);
             String plaintext = reader.lines().collect(Collectors.joining());
             logger.debug("plaintext {}", plaintext);
 
@@ -612,13 +609,13 @@ public final class EncryptedBlobStoreTest {
                 makeBlob(encryptedBlobStore, blobName, is, content.length());
             encryptedBlobStore.putBlob(containerName, blob);
 
-            GetOptions options = new GetOptions();
+            var options = new GetOptions();
             options.tail(length);
             blob = encryptedBlobStore.getBlob(containerName, blobName, options);
 
             InputStream blobIs = blob.getPayload().openStream();
-            InputStreamReader r = new InputStreamReader(blobIs);
-            BufferedReader reader = new BufferedReader(r);
+            var r = new InputStreamReader(blobIs);
+            var reader = new BufferedReader(r);
             String plaintext = reader.lines().collect(Collectors.joining());
             logger.debug("plaintext {}", plaintext);
 
@@ -632,7 +629,7 @@ public final class EncryptedBlobStoreTest {
 
         for (int run = 0; run < 100; run++) {
             for (int offset = 0; offset < 50; offset++) {
-                Random rand = new Random();
+                var rand = new Random();
                 int end = offset + rand.nextInt(20) + 2;
                 int size = end - offset + 1;
 
@@ -651,14 +648,14 @@ public final class EncryptedBlobStoreTest {
                     content.length());
                 encryptedBlobStore.putBlob(containerName, blob);
 
-                GetOptions options = new GetOptions();
+                var options = new GetOptions();
                 options.range(offset, end);
                 blob = encryptedBlobStore.getBlob(containerName, blobName,
                     options);
 
                 InputStream blobIs = blob.getPayload().openStream();
-                InputStreamReader r = new InputStreamReader(blobIs);
-                BufferedReader reader = new BufferedReader(r);
+                var r = new InputStreamReader(blobIs);
+                var reader = new BufferedReader(r);
                 String plaintext = reader.lines().collect(Collectors.joining());
                 logger.debug("plaintext {}", plaintext);
 
@@ -705,14 +702,14 @@ public final class EncryptedBlobStoreTest {
                 encryptedBlobStore.listMultipartUpload(mpu);
             encryptedBlobStore.completeMultipartUpload(mpu, parts);
 
-            GetOptions options = new GetOptions();
+            var options = new GetOptions();
             options.startAt(offset);
             Blob blob =
                 encryptedBlobStore.getBlob(containerName, blobName, options);
 
             InputStream blobIs = blob.getPayload().openStream();
-            InputStreamReader r = new InputStreamReader(blobIs);
-            BufferedReader reader = new BufferedReader(r);
+            var r = new InputStreamReader(blobIs);
+            var reader = new BufferedReader(r);
             String plaintext = reader.lines().collect(Collectors.joining());
             logger.debug("plaintext {}", plaintext);
 
@@ -755,14 +752,14 @@ public final class EncryptedBlobStoreTest {
                 encryptedBlobStore.listMultipartUpload(mpu);
             encryptedBlobStore.completeMultipartUpload(mpu, parts);
 
-            GetOptions options = new GetOptions();
+            var options = new GetOptions();
             options.tail(length);
             Blob blob =
                 encryptedBlobStore.getBlob(containerName, blobName, options);
 
             InputStream blobIs = blob.getPayload().openStream();
-            InputStreamReader r = new InputStreamReader(blobIs);
-            BufferedReader reader = new BufferedReader(r);
+            var r = new InputStreamReader(blobIs);
+            var reader = new BufferedReader(r);
             String plaintext = reader.lines().collect(Collectors.joining());
             logger.debug("plaintext {}", plaintext);
 
@@ -777,7 +774,7 @@ public final class EncryptedBlobStoreTest {
         for (int run = 0; run < 100; run++) {
             // total len = 139
             for (int offset = 0; offset < 70; offset++) {
-                Random rand = new Random();
+                var rand = new Random();
                 int end = offset + rand.nextInt(60) + 2;
                 int size = end - offset + 1;
                 logger.debug("Test with offset {} and end {} size {}",
@@ -816,14 +813,14 @@ public final class EncryptedBlobStoreTest {
                     encryptedBlobStore.listMultipartUpload(mpu);
                 encryptedBlobStore.completeMultipartUpload(mpu, parts);
 
-                GetOptions options = new GetOptions();
+                var options = new GetOptions();
                 options.range(offset, end);
                 Blob blob = encryptedBlobStore.getBlob(containerName, blobName,
                     options);
 
                 InputStream blobIs = blob.getPayload().openStream();
-                InputStreamReader r = new InputStreamReader(blobIs);
-                BufferedReader reader = new BufferedReader(r);
+                var r = new InputStreamReader(blobIs);
+                var reader = new BufferedReader(r);
                 String plaintext = reader.lines().collect(Collectors.joining());
                 logger.debug("plaintext {}", plaintext);
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2021 Andrew Gaul <andrew@gaul.org>
+ * Copyright 2014-2025 Andrew Gaul <andrew@gaul.org>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,7 +22,8 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.util.Properties;
 
-import org.apache.commons.io.FileUtils;
+import com.google.common.io.MoreFiles;
+
 import org.eclipse.jetty.util.component.AbstractLifeCycle;
 import org.gaul.s3proxy.AuthenticationType;
 import org.gaul.s3proxy.S3Proxy;
@@ -102,7 +103,7 @@ public class S3ProxyJunitCore {
         accessKey = builder.accessKey;
         secretKey = builder.secretKey;
 
-        Properties properties = new Properties();
+        var properties = new Properties();
         try {
             blobStoreLocation = Files.createTempDirectory("S3Proxy")
                     .toFile();
@@ -164,7 +165,11 @@ public class S3ProxyJunitCore {
         } catch (Exception e) {
             throw new RuntimeException("Unable to stop S3 proxy", e);
         }
-        FileUtils.deleteQuietly(blobStoreLocation);
+        try {
+            MoreFiles.deleteRecursively(blobStoreLocation.toPath());
+        } catch (IOException ioe) {
+            // ignore
+        }
         logger.debug("S3 proxy has stopped");
     }
 

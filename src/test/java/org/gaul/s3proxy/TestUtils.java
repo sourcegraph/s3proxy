@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2021 Andrew Gaul <andrew@gaul.org>
+ * Copyright 2014-2025 Andrew Gaul <andrew@gaul.org>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,22 +16,22 @@
 
 package org.gaul.s3proxy;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileSystems;
+import java.nio.file.Files;
+import java.util.List;
 import java.util.Properties;
 import java.util.Random;
 
 import com.google.common.base.Strings;
-import com.google.common.collect.ImmutableList;
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
 import com.google.common.io.ByteSource;
-import com.google.common.io.Files;
+import com.google.common.io.MoreFiles;
 import com.google.common.io.Resources;
-import com.google.inject.Module;
 
 import org.eclipse.jetty.util.component.AbstractLifeCycle;
 import org.jclouds.Constants;
@@ -152,7 +152,7 @@ final class TestUtils {
     }
 
     static S3ProxyLaunchInfo startS3Proxy(String configFile) throws Exception {
-        S3ProxyLaunchInfo info = new S3ProxyLaunchInfo();
+        var info = new S3ProxyLaunchInfo();
 
         try (InputStream is = Resources.asByteSource(Resources.getResource(
                 configFile)).openStream()) {
@@ -166,9 +166,9 @@ final class TestUtils {
         String credential = info.getProperties().getProperty(
                 Constants.PROPERTY_CREDENTIAL);
         if (provider.equals("google-cloud-storage")) {
-            File credentialFile = new File(credential);
-            if (credentialFile.exists()) {
-                credential = Files.asCharSource(credentialFile,
+            var path = FileSystems.getDefault().getPath(credential);
+            if (Files.exists(path)) {
+                credential = MoreFiles.asCharSource(path,
                         StandardCharsets.UTF_8).read();
             }
             info.getProperties().remove(Constants.PROPERTY_CREDENTIAL);
@@ -179,7 +179,7 @@ final class TestUtils {
         ContextBuilder builder = ContextBuilder
                 .newBuilder(provider)
                 .credentials(identity, credential)
-                .modules(ImmutableList.<Module>of(new SLF4JLoggingModule()))
+                .modules(List.of(new SLF4JLoggingModule()))
                 .overrides(info.getProperties());
         if (!Strings.isNullOrEmpty(endpoint)) {
             builder.endpoint(endpoint);

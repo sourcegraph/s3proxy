@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2021 Andrew Gaul <andrew@gaul.org>
+ * Copyright 2014-2025 Andrew Gaul <andrew@gaul.org>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,19 +17,17 @@
 package org.gaul.s3proxy;
 
 import java.util.List;
+import java.util.Map;
 
 import javax.annotation.Nullable;
 
 import com.google.common.base.Splitter;
-import com.google.common.collect.ImmutableMap;
 
 final class S3AuthorizationHeader {
-    private static final ImmutableMap<String, String> DIGEST_MAP =
-            ImmutableMap.<String, String>builder()
-            .put("SHA256", "SHA-256")
-            .put("SHA1", "SHA-1")
-            .put("MD5", "MD5")
-            .build();
+    private static final Map<String, String> DIGEST_MAP = Map.of(
+            "SHA256", "SHA-256",
+            "SHA1", "SHA-1",
+            "MD5", "MD5");
     private static final String SIGNATURE_FIELD = "Signature=";
     private static final String CREDENTIAL_FIELD = "Credential=";
 

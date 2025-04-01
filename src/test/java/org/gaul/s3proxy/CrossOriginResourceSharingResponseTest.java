@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2021 Andrew Gaul <andrew@gaul.org>
+ * Copyright 2014-2025 Andrew Gaul <andrew@gaul.org>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,8 +28,6 @@ import java.security.cert.X509Certificate;
 import java.util.Date;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
-
-import javax.net.ssl.SSLContext;
 
 import com.amazonaws.HttpMethod;
 import com.amazonaws.SDKGlobalConfiguration;
@@ -115,7 +113,7 @@ public final class CrossOriginResourceSharingResponseTest {
                 .payload(payload).contentLength(payload.size()).build();
         info.getBlobStore().putBlob(containerName, blob);
 
-        Date expiration = new Date(System.currentTimeMillis() +
+        var expiration = new Date(System.currentTimeMillis() +
                 TimeUnit.HOURS.toMillis(1));
         presignedGET = s3Client.generatePresignedUrl(containerName, blobName,
                 expiration, HttpMethod.GET).toURI();
@@ -140,7 +138,7 @@ public final class CrossOriginResourceSharingResponseTest {
     @Test
     public void testCorsPreflight() throws Exception {
         // Allowed origin and method
-        HttpOptions request = new HttpOptions(presignedGET);
+        var request = new HttpOptions(presignedGET);
         request.setHeader(HttpHeaders.ORIGIN, "https://example.com");
         request.setHeader(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET");
         HttpResponse response = httpClient.execute(request);
@@ -156,6 +154,9 @@ public final class CrossOriginResourceSharingResponseTest {
         assertThat(response.getFirstHeader(
                 HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS).getValue())
                 .isEqualTo("GET, PUT");
+        assertThat(response.getFirstHeader(
+                HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS).getValue())
+                .isEqualTo("ETag");
 
         // Allowed origin, method and header
         request.reset();
@@ -180,6 +181,9 @@ public final class CrossOriginResourceSharingResponseTest {
         assertThat(response.getFirstHeader(
                 HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS).getValue())
                 .isEqualTo("Accept");
+        assertThat(response.getFirstHeader(
+                HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS).getValue())
+                .isEqualTo("ETag");
 
         // Allowed origin, method and header combination
         request.reset();
@@ -205,12 +209,15 @@ public final class CrossOriginResourceSharingResponseTest {
         assertThat(response.getFirstHeader(
                 HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS).getValue())
                 .isEqualTo("Accept, Content-Type");
+        assertThat(response.getFirstHeader(
+                HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS).getValue())
+                .isEqualTo("ETag");
     }
 
     @Test
     public void testCorsPreflightPublicRead() throws Exception {
         // No CORS headers
-        HttpOptions request = new HttpOptions(publicGET);
+        var request = new HttpOptions(publicGET);
         HttpResponse response = httpClient.execute(request);
 
         assertThat(response.getStatusLine().getStatusCode())
@@ -249,13 +256,16 @@ public final class CrossOriginResourceSharingResponseTest {
                 HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS).getValue())
                 .isEqualTo("Accept, Content-Type");
         assertThat(response.getFirstHeader(
+                HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS).getValue())
+                .isEqualTo("ETag");
+        assertThat(response.getFirstHeader(
                 HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS))
                 .isNull();
     }
 
     @Test
     public void testCorsActual() throws Exception {
-        HttpGet request = new HttpGet(presignedGET);
+        var request = new HttpGet(presignedGET);
         request.setHeader(HttpHeaders.ORIGIN, "https://example.com");
         HttpResponse response = httpClient.execute(request);
         assertThat(response.getStatusLine().getStatusCode())
@@ -270,16 +280,21 @@ public final class CrossOriginResourceSharingResponseTest {
         assertThat(response.getFirstHeader(
                 HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS).getValue())
                     .isEqualTo("GET, PUT");
+        assertThat(response.getFirstHeader(
+                HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS).getValue())
+                .isEqualTo("ETag");
     }
 
     @Test
     public void testNonCors() throws Exception {
-        HttpGet request = new HttpGet(presignedGET);
+        var request = new HttpGet(presignedGET);
         HttpResponse response = httpClient.execute(request);
         assertThat(response.getStatusLine().getStatusCode())
                 .isEqualTo(HttpStatus.SC_OK);
         assertThat(response.containsHeader(
                 HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN)).isFalse();
+        assertThat(response.containsHeader(
+                HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS)).isFalse();
     }
 
     private static String createRandomContainerName() {
@@ -290,7 +305,7 @@ public final class CrossOriginResourceSharingResponseTest {
             KeyManagementException, NoSuchAlgorithmException,
             KeyStoreException {
         // Relax SSL Certificate check
-        SSLContext sslContext = new SSLContextBuilder().loadTrustMaterial(
+        var sslContext = new SSLContextBuilder().loadTrustMaterial(
                 null, new TrustStrategy() {
                     @Override
                     public boolean isTrusted(X509Certificate[] arg0,

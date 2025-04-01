@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2021 Andrew Gaul <andrew@gaul.org>
+ * Copyright 2014-2025 Andrew Gaul <andrew@gaul.org>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,11 +18,12 @@ package org.gaul.s3proxy;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Map;
 import java.util.concurrent.TimeoutException;
 
 import javax.annotation.Nullable;
 
-import com.google.common.collect.ImmutableMap;
+import com.google.common.net.HttpHeaders;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -81,7 +82,7 @@ final class S3ProxyHandlerJetty extends AbstractHandler {
         } catch (ContainerNotFoundException cnfe) {
             S3ErrorCode code = S3ErrorCode.NO_SUCH_BUCKET;
             handler.sendSimpleErrorResponse(request, response, code,
-                    code.getMessage(), ImmutableMap.<String, String>of());
+                    code.getMessage(), Map.of());
             baseRequest.setHandled(true);
             return;
         } catch (HttpResponseException hre) {
@@ -94,6 +95,12 @@ final class S3ProxyHandlerJetty extends AbstractHandler {
                         hre.getMessage());
                 return;
             }
+
+            String eTag = hr.getFirstHeaderOrNull(HttpHeaders.ETAG);
+            if (eTag != null) {
+                response.setHeader(HttpHeaders.ETAG, eTag);
+            }
+
             int status = hr.getStatusCode();
             switch (status) {
             case 412:
@@ -111,7 +118,7 @@ final class S3ProxyHandlerJetty extends AbstractHandler {
                 break;
             default:
                 logger.debug("HttpResponseException:", hre);
-                response.sendError(status, hre.getContent());
+                response.setStatus(status);
                 break;
             }
             baseRequest.setHandled(true);
@@ -122,10 +129,22 @@ final class S3ProxyHandlerJetty extends AbstractHandler {
                     iae.getMessage());
             baseRequest.setHandled(true);
             return;
+        } catch (IllegalStateException ise) {
+            // google-cloud-storage uses a different exception
+            if (ise.getMessage().startsWith("PreconditionFailed")) {
+                sendS3Exception(request, response,
+                        new S3Exception(S3ErrorCode.PRECONDITION_FAILED));
+                return;
+            }
+            logger.debug("IllegalStateException:", ise);
+            response.sendError(HttpServletResponse.SC_BAD_REQUEST,
+                    ise.getMessage());
+            baseRequest.setHandled(true);
+            return;
         } catch (KeyNotFoundException knfe) {
             S3ErrorCode code = S3ErrorCode.NO_SUCH_KEY;
             handler.sendSimpleErrorResponse(request, response, code,
-                    code.getMessage(), ImmutableMap.<String, String>of());
+                    code.getMessage(), Map.of());
             baseRequest.setHandled(true);
             return;
         } catch (S3Exception se) {
@@ -143,14 +162,14 @@ final class S3ProxyHandlerJetty extends AbstractHandler {
                     AuthorizationException.class) != null) {
                 S3ErrorCode code = S3ErrorCode.ACCESS_DENIED;
                 handler.sendSimpleErrorResponse(request, response, code,
-                        code.getMessage(), ImmutableMap.<String, String>of());
+                        code.getMessage(), Map.of());
                 baseRequest.setHandled(true);
                 return;
             } else if (Throwables2.getFirstThrowableOfType(throwable,
                     TimeoutException.class) != null) {
                 S3ErrorCode code = S3ErrorCode.REQUEST_TIMEOUT;
                 handler.sendSimpleErrorResponse(request, response, code,
-                        code.getMessage(), ImmutableMap.<String, String>of());
+                        code.getMessage(), Map.of());
                 baseRequest.setHandled(true);
                 return;
             } else {

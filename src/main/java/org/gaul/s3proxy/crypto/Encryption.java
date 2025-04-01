@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2021 Andrew Gaul <andrew@gaul.org>
+ * Copyright 2014-2025 Andrew Gaul <andrew@gaul.org>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -48,7 +48,7 @@ public class Encryption {
 
     private IvParameterSpec generateIV() {
         byte[] iv = new byte[Constants.AES_BLOCK_SIZE];
-        SecureRandom randomSecureRandom = new SecureRandom();
+        var randomSecureRandom = new SecureRandom();
         randomSecureRandom.nextBytes(iv);
 
         return new IvParameterSpec(iv);

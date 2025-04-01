@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2021 Andrew Gaul <andrew@gaul.org>
+ * Copyright 2014-2025 Andrew Gaul <andrew@gaul.org>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,13 +17,12 @@
 package org.gaul.s3proxy;
 
 import java.io.Console;
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystems;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.PathMatcher;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -33,29 +32,35 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
+import com.amazonaws.auth.AWSCredentials;
+import com.amazonaws.auth.AWSCredentialsProvider;
+import com.amazonaws.auth.AWSSessionCredentials;
+import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
 import com.google.common.base.Strings;
+import com.google.common.base.Supplier;
 import com.google.common.collect.ImmutableBiMap;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
-import com.google.common.io.Files;
+import com.google.common.io.MoreFiles;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import com.google.inject.Module;
 
+import org.gaul.modernizer_maven_annotations.SuppressModernizer;
 import org.jclouds.Constants;
 import org.jclouds.ContextBuilder;
 import org.jclouds.JcloudsVersion;
+import org.jclouds.aws.domain.SessionCredentials;
 import org.jclouds.blobstore.BlobStore;
 import org.jclouds.blobstore.BlobStoreContext;
 import org.jclouds.concurrent.DynamicExecutors;
 import org.jclouds.concurrent.config.ExecutorServiceModule;
+import org.jclouds.domain.Credentials;
 import org.jclouds.location.reference.LocationConstants;
 import org.jclouds.logging.slf4j.config.SLF4JLoggingModule;
 import org.jclouds.openstack.swift.v1.blobstore.RegionScopedBlobStoreContext;
+import org.jclouds.s3.domain.ObjectMetadata.StorageClass;
 import org.kohsuke.args4j.CmdLineException;
 import org.kohsuke.args4j.CmdLineParser;
 import org.kohsuke.args4j.Option;
@@ -71,20 +76,21 @@ public final class Main {
     private static final class Options {
         @Option(name = "--properties",
                 usage = "S3Proxy configuration (required, multiple allowed)")
-        private List<File> propertiesFiles = new ArrayList<>();
+        private List<Path> properties = new ArrayList<>();
 
         @Option(name = "--version", usage = "display version")
         private boolean version;
     }
 
+    @SuppressWarnings("EqualsIncompatibleType")
     public static void main(String[] args) throws Exception {
         Console console = System.console();
         if (console == null) {
             System.setErr(createLoggerErrorPrintStream());
         }
 
-        Options options = new Options();
-        CmdLineParser parser = new CmdLineParser(options);
+        var options = new Options();
+        var parser = new CmdLineParser(options);
         try {
             parser.parseArgument(args);
         } catch (CmdLineException cle) {
@@ -95,31 +101,34 @@ public final class Main {
             System.err.println(
                     Main.class.getPackage().getImplementationVersion());
             System.exit(0);
-        } else if (options.propertiesFiles.isEmpty()) {
+        } else if (options.properties.isEmpty()) {
             usage(parser);
         }
 
         S3Proxy.Builder s3ProxyBuilder = null;
-        ThreadFactory factory = new ThreadFactoryBuilder()
+        var factory = new ThreadFactoryBuilder()
                 .setNameFormat("user thread %d")
                 .setThreadFactory(Executors.defaultThreadFactory())
                 .build();
         ExecutorService executorService = DynamicExecutors.newScalingThreadPool(
                 1, 20, 60 * 1000, factory);
-        ImmutableMap.Builder<String, Map.Entry<String, BlobStore>> locators =
-                ImmutableMap.builder();
-        ImmutableMap.Builder<PathMatcher, Map.Entry<String, BlobStore>>
-                globLocators = ImmutableMap.builder();
+        var locators = ImmutableMap
+                .<String, Map.Entry<String, BlobStore>>builder();
+        var globLocators = ImmutableMap
+                .<PathMatcher, Map.Entry<String, BlobStore>>builder();
         Set<String> locatorGlobs = new HashSet<>();
         Set<String> parsedIdentities = new HashSet<>();
-        for (File propertiesFile : options.propertiesFiles) {
-            Properties properties = new Properties();
-            try (InputStream is = new FileInputStream(propertiesFile)) {
+        for (var path : options.properties) {
+            var properties = new Properties();
+            try (var is = Files.newInputStream(path)) {
                 properties.load(is);
             }
             properties.putAll(System.getProperties());
 
             BlobStore blobStore = createBlobStore(properties, executorService);
+            if (blobStore.getContext().unwrap().getProviderMetadata().getId().equals("filesystem")) {
+                logger.warn("filesystem storage backend deprecated -- please use filesystem-nio2 instead");
+            }
 
             blobStore = parseMiddlewareProperties(blobStore, executorService,
                     properties);
@@ -136,7 +145,7 @@ public final class Main {
                         S3ProxyConstants.PROPERTY_CREDENTIAL);
                 if (parsedIdentities.add(localIdentity)) {
                     locators.put(localIdentity,
-                            Maps.immutableEntry(localCredential, blobStore));
+                            Map.entry(localCredential, blobStore));
                 }
             }
             for (String key : properties.stringPropertyNames()) {
@@ -177,10 +186,8 @@ public final class Main {
             throw e;
         }
 
-        final Map<String, Map.Entry<String, BlobStore>> locator =
-                locators.build();
-        final Map<PathMatcher, Map.Entry<String, BlobStore>>
-                globLocator = globLocators.build();
+        var locator = locators.build();
+        var globLocator = globLocators.build();
         if (!locator.isEmpty() || !globLocator.isEmpty()) {
             s3Proxy.setBlobStoreLocator(
                     new GlobBlobStoreLocator(locator, globLocator));
@@ -197,8 +204,8 @@ public final class Main {
     private static BlobStore parseMiddlewareProperties(BlobStore blobStore,
             ExecutorService executorService, Properties properties)
             throws IOException {
-        Properties altProperties = new Properties();
-        for (Map.Entry<Object, Object> entry : properties.entrySet()) {
+        var altProperties = new Properties();
+        for (var entry : properties.entrySet()) {
             String key = (String) entry.getKey();
             if (key.startsWith(S3ProxyConstants.PROPERTY_ALT_JCLOUDS_PREFIX)) {
                 key = key.substring(
@@ -248,16 +255,16 @@ public final class Main {
             blobStore = AliasBlobStore.newAliasBlobStore(blobStore, aliases);
         }
 
-        ImmutableList<Map.Entry<Pattern, String>> regexs =
+        List<Map.Entry<Pattern, String>> regexs =
                 RegexBlobStore.parseRegexs(properties);
         if (!regexs.isEmpty()) {
             System.err.println("Using regex backend");
             blobStore = RegexBlobStore.newRegexBlobStore(blobStore, regexs);
         }
 
-        ImmutableMap<String, Integer> shards =
+        Map<String, Integer> shards =
                 ShardedBlobStore.parseBucketShards(properties);
-        ImmutableMap<String, String> prefixes =
+        Map<String, String> prefixes =
                 ShardedBlobStore.parsePrefixes(properties);
         if (!shards.isEmpty()) {
             System.err.println("Using sharded buckets backend");
@@ -271,6 +278,33 @@ public final class Main {
             System.err.println("Using encrypted storage backend");
             blobStore = EncryptedBlobStore.newEncryptedBlobStore(blobStore,
                 properties);
+        }
+
+        var storageClass = properties.getProperty(
+                S3ProxyConstants.PROPERTY_STORAGE_CLASS_BLOBSTORE);
+        if (!Strings.isNullOrEmpty(storageClass)) {
+            System.err.println("Using storage class override backend");
+            var storageClassBlobStore =
+                    StorageClassBlobStore.newStorageClassBlobStore(
+                            blobStore, storageClass);
+            blobStore = storageClassBlobStore;
+            System.err.println("Configuration storage class: " + storageClass);
+            // TODO: This only makes sense for S3 backends.
+            System.err.println("Mapping storage storage class to: " +
+                    StorageClass.fromTier(storageClassBlobStore.getTier()));
+        }
+
+        String userMetadataReplacerBlobStore = properties.getProperty(
+                S3ProxyConstants.PROPERTY_USER_METADATA_REPLACER);
+        if ("true".equalsIgnoreCase(userMetadataReplacerBlobStore)) {
+            System.err.println("Using user metadata replacers storage backend");
+            String fromChars = properties.getProperty(S3ProxyConstants
+                    .PROPERTY_USER_METADATA_REPLACER_FROM_CHARS);
+            String toChars = properties.getProperty(S3ProxyConstants
+                    .PROPERTY_USER_METADATA_REPLACER_TO_CHARS);
+            blobStore = UserMetadataReplacerBlobStore
+                    .newUserMetadataReplacerBlobStore(
+                            blobStore, fromChars, toChars);
         }
 
         return blobStore;
@@ -327,9 +361,9 @@ public final class Main {
             identity = Strings.nullToEmpty(identity);
             credential = Strings.nullToEmpty(credential);
         } else if (provider.equals("google-cloud-storage")) {
-            File credentialFile = new File(credential);
-            if (credentialFile.exists()) {
-                credential = Files.asCharSource(credentialFile,
+            var path = FileSystems.getDefault().getPath(credential);
+            if (Files.exists(path)) {
+                credential = MoreFiles.asCharSource(path,
                         StandardCharsets.UTF_8).read();
             }
             properties.remove(Constants.PROPERTY_CREDENTIAL);
@@ -354,13 +388,41 @@ public final class Main {
 
         ContextBuilder builder = ContextBuilder
                 .newBuilder(provider)
-                .credentials(identity, credential)
-                .modules(ImmutableList.<Module>of(
+                .modules(List.of(
                         new SLF4JLoggingModule(),
                         new ExecutorServiceModule(executorService)))
                 .overrides(properties);
         if (!Strings.isNullOrEmpty(endpoint)) {
             builder = builder.endpoint(endpoint);
+        }
+
+        if ((identity.isEmpty() || credential.isEmpty()) && provider.equals("aws-s3")) {
+            @SuppressModernizer
+            Supplier<Credentials> credentialsSupplier = new Supplier<Credentials>() {
+                @Override
+                public Credentials get() {
+                    AWSCredentialsProvider authChain = DefaultAWSCredentialsProviderChain.getInstance();
+                    AWSCredentials newCreds = authChain.getCredentials();
+                    Credentials jcloudCred = null;
+
+                    if (newCreds instanceof AWSSessionCredentials) {
+                        jcloudCred = SessionCredentials.builder()
+                                .accessKeyId(newCreds.getAWSAccessKeyId())
+                                .secretAccessKey(newCreds.getAWSSecretKey())
+                                .sessionToken(((AWSSessionCredentials) newCreds).getSessionToken())
+                                .build();
+                    } else {
+                        jcloudCred = new Credentials(
+                                newCreds.getAWSAccessKeyId(), newCreds.getAWSSecretKey()
+                        );
+                    }
+
+                    return jcloudCred;
+                }
+            };
+            builder = builder.credentialsSupplier(credentialsSupplier);
+        } else {
+            builder = builder.credentials(identity, credential);
         }
 
         BlobStoreContext context = builder.build(BlobStoreContext.class);

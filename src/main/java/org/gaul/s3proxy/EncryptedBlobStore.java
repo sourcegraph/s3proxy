@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2021 Andrew Gaul <andrew@gaul.org>
+ * Copyright 2014-2025 Andrew Gaul <andrew@gaul.org>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.security.spec.KeySpec;
 import java.util.ArrayList;
 import java.util.List;
@@ -35,8 +36,8 @@ import javax.crypto.spec.SecretKeySpec;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.hash.HashCode;
+import com.google.common.hash.Hashing;
 
-import org.apache.commons.codec.digest.DigestUtils;
 import org.gaul.s3proxy.crypto.Constants;
 import org.gaul.s3proxy.crypto.Decryption;
 import org.gaul.s3proxy.crypto.Encryption;
@@ -233,7 +234,7 @@ public final class EncryptedBlobStore extends ForwardingBlobStore {
     // filter the list by showing the unencrypted blob size
     private PageSet<? extends StorageMetadata> filteredList(
         PageSet<? extends StorageMetadata> pageSet) {
-        ImmutableSet.Builder<StorageMetadata> builder = ImmutableSet.builder();
+        var builder = ImmutableSet.<StorageMetadata>builder();
         for (StorageMetadata sm : pageSet) {
             if (sm instanceof BlobMetadata) {
                 MutableBlobMetadata mbm =
@@ -269,7 +270,7 @@ public final class EncryptedBlobStore extends ForwardingBlobStore {
     }
 
     private MutableBlobMetadata setEncryptedSuffix(BlobMetadata blobMeta) {
-        MutableBlobMetadata bm = new MutableBlobMetadataImpl(blobMeta);
+        var bm = new MutableBlobMetadataImpl(blobMeta);
         if (blobMeta.getName() != null && !isEncrypted(blobMeta.getName())) {
             bm.setName(blobNameWithSuffix(blobMeta.getName()));
         }
@@ -283,7 +284,7 @@ public final class EncryptedBlobStore extends ForwardingBlobStore {
     }
 
     private MutableBlobMetadata removeEncryptedSuffix(BlobMetadata blobMeta) {
-        MutableBlobMetadata bm = new MutableBlobMetadataImpl(blobMeta);
+        var bm = new MutableBlobMetadataImpl(blobMeta);
         if (isEncrypted(bm.getName())) {
             String blobName = bm.getName();
             bm.setName(removeEncryptedSuffix(blobName));
@@ -348,7 +349,7 @@ public final class EncryptedBlobStore extends ForwardingBlobStore {
 
     private String generateUploadId(String container, String blobName) {
         String path = container + "/" + blobName;
-        return DigestUtils.sha256Hex(path);
+        return Hashing.md5().hashBytes(path.getBytes(StandardCharsets.UTF_8)).toString();
     }
 
     @Override
@@ -577,7 +578,7 @@ public final class EncryptedBlobStore extends ForwardingBlobStore {
 
         // emulate list of multipart uploads on gcp
         if (getBlobStoreType().equals("google-cloud-storage")) {
-            ListContainerOptions options = new ListContainerOptions();
+            var options = new ListContainerOptions();
             PageSet<? extends StorageMetadata> mpuList =
                 delegate().list(container,
                     options.prefix(Constants.MPU_FOLDER));

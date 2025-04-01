@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2021 Andrew Gaul <andrew@gaul.org>
+ * Copyright 2014-2025 Andrew Gaul <andrew@gaul.org>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,6 +32,16 @@ final class CompleteMultipartUploadRequest {
         int partNumber;
         @JacksonXmlProperty(localName = "ETag")
         String eTag;
+
+        // TODO: unsupported checksums
+        @JacksonXmlProperty(localName = "ChecksumCRC32")
+        String checksumCRC32;
+        @JacksonXmlProperty(localName = "ChecksumCRC32C")
+        String checksumCRC32C;
+        @JacksonXmlProperty(localName = "ChecksumSHA1")
+        String checksumSHA1;
+        @JacksonXmlProperty(localName = "ChecksumSHA256")
+        String checksumSHA256;
     }
 }
 // CHECKSTYLE:ON

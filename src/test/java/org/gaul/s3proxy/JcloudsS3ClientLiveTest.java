@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2021 Andrew Gaul <andrew@gaul.org>
+ * Copyright 2014-2025 Andrew Gaul <andrew@gaul.org>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -67,7 +67,8 @@ public final class JcloudsS3ClientLiveTest extends S3ClientLiveTest {
     protected Properties setupProperties() {
         TestUtils.S3ProxyLaunchInfo info;
         try {
-            info = TestUtils.startS3Proxy("s3proxy.conf");
+            info = TestUtils.startS3Proxy(
+                    System.getProperty("s3proxy.test.conf", "s3proxy.conf"));
             s3Proxy = info.getS3Proxy();
             context = info.getBlobStore().getContext();
             blobStoreType = context.unwrap().getProviderMetadata().getId();
@@ -117,8 +118,8 @@ public final class JcloudsS3ClientLiveTest extends S3ClientLiveTest {
     @Override
     protected URL getObjectURL(String containerName, String key)
             throws Exception {
-        return new URL(String.format("%s/%s/%s", URI.create(endpoint),
-                containerName, key));
+        return URI.create(String.format("%s/%s/%s", URI.create(endpoint),
+                containerName, key)).toURL();
     }
 
     @Override

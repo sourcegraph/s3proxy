@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2021 Andrew Gaul <andrew@gaul.org>
+ * Copyright 2014-2025 Andrew Gaul <andrew@gaul.org>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,8 @@ package org.gaul.s3proxy;
 final class AwsHttpHeaders {
     static final String ACL = "x-amz-acl";
     static final String API_VERSION = "x-amz-api-version";
+    static final String CHECKSUM_ALGORITHM = "x-amz-sdk-checksum-algorithm";
+    static final String CHECKSUM_CRC64NVME = "x-amz-checksum-crc64nvme";
     static final String CONTENT_SHA256 = "x-amz-content-sha256";
     static final String COPY_SOURCE = "x-amz-copy-source";
     static final String COPY_SOURCE_IF_MATCH = "x-amz-copy-source-if-match";
@@ -35,6 +37,8 @@ final class AwsHttpHeaders {
     static final String METADATA_DIRECTIVE = "x-amz-metadata-directive";
     static final String REQUEST_ID = "x-amz-request-id";
     static final String STORAGE_CLASS = "x-amz-storage-class";
+    static final String TRANSFER_ENCODING = "x-amz-te";
+    static final String USER_AGENT = "x-amz-user-agent";
 
     private AwsHttpHeaders() {
         throw new AssertionError("intentionally unimplemented");
