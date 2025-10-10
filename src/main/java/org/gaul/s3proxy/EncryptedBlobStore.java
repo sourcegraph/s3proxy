@@ -20,7 +20,9 @@ import static com.google.common.base.Preconditions.checkArgument;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
 import java.security.spec.KeySpec;
 import java.util.ArrayList;
 import java.util.List;
@@ -41,6 +43,7 @@ import com.google.common.hash.Hashing;
 import org.gaul.s3proxy.crypto.Constants;
 import org.gaul.s3proxy.crypto.Decryption;
 import org.gaul.s3proxy.crypto.Encryption;
+import org.gaul.s3proxy.crypto.PartPadding;
 import org.jclouds.blobstore.BlobStore;
 import org.jclouds.blobstore.domain.Blob;
 import org.jclouds.blobstore.domain.BlobAccess;
@@ -102,7 +105,7 @@ public final class EncryptedBlobStore extends ForwardingBlobStore {
                     128);
             SecretKey tmp = factory.generateSecret(spec);
             secretKey = new SecretKeySpec(tmp.getEncoded(), "AES");
-        } catch (Exception e) {
+        } catch (GeneralSecurityException e) {
             throw new IllegalArgumentException(e);
         }
     }
@@ -170,7 +173,7 @@ public final class EncryptedBlobStore extends ForwardingBlobStore {
                     Constants.PADDING_BLOCK_SIZE;
 
             return cipheredBlob(container, blob, is, contentLength, true);
-        } catch (Exception e) {
+        } catch (IOException | GeneralSecurityException e) {
             throw new RuntimeException(e);
         }
     }
@@ -201,7 +204,7 @@ public final class EncryptedBlobStore extends ForwardingBlobStore {
                 .setContentLength(contentLength);
 
             return cipheredPayload;
-        } catch (Exception e) {
+        } catch (IOException | GeneralSecurityException e) {
             throw new RuntimeException(e);
         }
     }
@@ -226,8 +229,8 @@ public final class EncryptedBlobStore extends ForwardingBlobStore {
             }
 
             return cipheredBlob(container, blob, is, contentLength, false);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
         }
     }
 
@@ -317,9 +320,21 @@ public final class EncryptedBlobStore extends ForwardingBlobStore {
                 mbm.setSize(size);
                 mbm.getContentMetadata().setContentLength(size);
             } else {
-                long size = blobMeta.getSize() - Constants.PADDING_BLOCK_SIZE;
-                mbm.setSize(size);
-                mbm.getContentMetadata().setContentLength(size);
+                // if there is also no eTag suffix then get the number of parts from last padding
+                var options = new GetOptions()
+                    .range(blobMeta.getSize() - Constants.PADDING_BLOCK_SIZE, blobMeta.getSize());
+                var name = blobNameWithSuffix(blobMeta.getName());
+                var blob = delegate().getBlob(blobMeta.getContainer(), name, options);
+                try {
+                    PartPadding lastPartPadding = PartPadding.readPartPaddingFromBlob(blob);
+                    int parts = lastPartPadding.getPart();
+                    int partPaddingSizes = Constants.PADDING_BLOCK_SIZE * parts;
+                    long size = blobMeta.getSize() - partPaddingSizes;
+                    mbm.setSize(size);
+                    mbm.getContentMetadata().setContentLength(size);
+                } catch (IOException e) {
+                    throw new UncheckedIOException("Failed to read part-padding from encrypted blob", e);
+                }
             }
         }
 
@@ -430,8 +445,8 @@ public final class EncryptedBlobStore extends ForwardingBlobStore {
                 return delegate().getBlob(containerName, blobName, getOptions);
             }
 
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
         }
     }
 
@@ -558,7 +573,7 @@ public final class EncryptedBlobStore extends ForwardingBlobStore {
                 String uploadId = generateUploadId(container, mbm.getName());
 
                 // to emulate later the list of multipart uploads
-                // we create a placeholer
+                // we create a placeholder
                 BlobBuilder builder =
                     blobBuilder(Constants.MPU_FOLDER + uploadId)
                         .payload("")

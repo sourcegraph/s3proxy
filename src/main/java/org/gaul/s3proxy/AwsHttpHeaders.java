@@ -21,6 +21,7 @@ final class AwsHttpHeaders {
     static final String API_VERSION = "x-amz-api-version";
     static final String CHECKSUM_ALGORITHM = "x-amz-checksum-algorithm";
     static final String CHECKSUM_CRC64NVME = "x-amz-checksum-crc64nvme";
+    static final String CHECKSUM_MODE = "x-amz-checksum-mode";
     static final String CONTENT_SHA256 = "x-amz-content-sha256";
     static final String COPY_SOURCE = "x-amz-copy-source";
     static final String COPY_SOURCE_IF_MATCH = "x-amz-copy-source-if-match";
@@ -38,6 +39,7 @@ final class AwsHttpHeaders {
     static final String REQUEST_ID = "x-amz-request-id";
     static final String SDK_CHECKSUM_ALGORITHM = "x-amz-sdk-checksum-algorithm";
     static final String STORAGE_CLASS = "x-amz-storage-class";
+    static final String TRAILER = "x-amz-trailer";
     static final String TRANSFER_ENCODING = "x-amz-te";
     static final String USER_AGENT = "x-amz-user-agent";
 

@@ -255,6 +255,30 @@ public final class AwsSdkTest {
         }
     }
 
+    @Ignore
+    @Test
+    public void testAwsV4SignatureChunkedSigned() throws Exception {
+        client = AmazonS3ClientBuilder.standard()
+                .withChunkedEncodingDisabled(false)
+                .withPayloadSigningEnabled(true)
+                .withCredentials(new AWSStaticCredentialsProvider(awsCreds))
+                .withEndpointConfiguration(s3EndpointConfig)
+                .build();
+
+        var metadata = new ObjectMetadata();
+        metadata.setContentLength(BYTE_SOURCE.size());
+        client.putObject(containerName, "foo",
+                BYTE_SOURCE.openStream(), metadata);
+
+        var object = client.getObject(containerName, "foo");
+        assertThat(object.getObjectMetadata().getContentLength()).isEqualTo(
+                BYTE_SOURCE.size());
+        try (var actual = object.getObjectContent();
+                var expected = BYTE_SOURCE.openStream()) {
+            assertThat(actual).hasSameContentAs(expected);
+        }
+    }
+
     @Test
     public void testAwsV4SignatureNonChunked() throws Exception {
         client = AmazonS3ClientBuilder.standard()
@@ -743,18 +767,18 @@ public final class AwsSdkTest {
             is.transferTo(OutputStream.nullOutputStream());
         }
 
-        ObjectMetadata reponseMetadata = object.getObjectMetadata();
-        assertThat(reponseMetadata.getCacheControl()).isEqualTo(
+        ObjectMetadata responseMetadata = object.getObjectMetadata();
+        assertThat(responseMetadata.getCacheControl()).isEqualTo(
                 cacheControl);
-        assertThat(reponseMetadata.getContentDisposition()).isEqualTo(
+        assertThat(responseMetadata.getContentDisposition()).isEqualTo(
                 contentDisposition);
-        assertThat(reponseMetadata.getContentEncoding()).isEqualTo(
+        assertThat(responseMetadata.getContentEncoding()).isEqualTo(
                 contentEncoding);
-        assertThat(reponseMetadata.getContentLanguage()).isEqualTo(
+        assertThat(responseMetadata.getContentLanguage()).isEqualTo(
                 contentLanguage);
-        assertThat(reponseMetadata.getContentType()).isEqualTo(
+        assertThat(responseMetadata.getContentType()).isEqualTo(
                 contentType);
-        assertThat(reponseMetadata.getHttpExpiresDate().getTime())
+        assertThat(responseMetadata.getHttpExpiresDate().getTime())
             .isEqualTo(expiresTime);
     }
 
@@ -1828,7 +1852,7 @@ public final class AwsSdkTest {
         }
     }
 
-    private static String createRandomContainerName() {
+    static String createRandomContainerName() {
         return "s3proxy-" + new Random().nextInt(Integer.MAX_VALUE);
     }
 }
