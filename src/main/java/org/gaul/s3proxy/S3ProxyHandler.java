@@ -17,10 +17,10 @@
 package org.gaul.s3proxy;
 
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.io.PushbackInputStream;
@@ -75,6 +75,7 @@ import com.google.common.hash.HashingInputStream;
 import com.google.common.io.BaseEncoding;
 import com.google.common.io.ByteSource;
 import com.google.common.io.ByteStreams;
+import com.google.common.io.CharStreams;
 import com.google.common.net.HostAndPort;
 import com.google.common.net.HttpHeaders;
 import com.google.common.net.PercentEscaper;
@@ -82,7 +83,7 @@ import com.google.common.net.PercentEscaper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
-import org.apache.commons.fileupload2.core.MultipartInput;
+import org.eclipse.jetty.server.MultiPartFormInputStream;
 import org.jclouds.blobstore.BlobStore;
 import org.jclouds.blobstore.KeyNotFoundException;
 import org.jclouds.blobstore.domain.Blob;
@@ -165,6 +166,7 @@ public class S3ProxyHandler {
             AwsHttpHeaders.API_VERSION,
             AwsHttpHeaders.CHECKSUM_ALGORITHM,  // TODO: ignoring header
             AwsHttpHeaders.CHECKSUM_CRC64NVME,  // TODO: ignoring header
+            AwsHttpHeaders.CHECKSUM_MODE,  // TODO: ignoring header
             AwsHttpHeaders.CONTENT_SHA256,
             AwsHttpHeaders.COPY_SOURCE,
             AwsHttpHeaders.COPY_SOURCE_IF_MATCH,
@@ -177,6 +179,7 @@ public class S3ProxyHandler {
             AwsHttpHeaders.METADATA_DIRECTIVE,
             AwsHttpHeaders.SDK_CHECKSUM_ALGORITHM,  // TODO: ignoring header
             AwsHttpHeaders.STORAGE_CLASS,
+            AwsHttpHeaders.TRAILER,
             AwsHttpHeaders.TRANSFER_ENCODING,  // TODO: ignoring header
             AwsHttpHeaders.USER_AGENT
     );
@@ -267,8 +270,7 @@ public class S3ProxyHandler {
         this.v4MaxNonChunkedRequestSize = v4MaxNonChunkedRequestSize;
         this.ignoreUnknownHeaders = ignoreUnknownHeaders;
         this.defaultBlobStore = blobStore;
-        xmlOutputFactory.setProperty("javax.xml.stream.isRepairingNamespaces",
-                Boolean.FALSE);
+        xmlOutputFactory.setProperty("javax.xml.stream.isRepairingNamespaces", false);
         this.servicePath = Strings.nullToEmpty(servicePath);
         this.maximumTimeSkew = maximumTimeSkew;
     }
@@ -446,7 +448,7 @@ public class S3ProxyHandler {
                 if (finalAuthType == AuthenticationType.AWS_V2) {
                     dateSkew = request.getDateHeader(AwsHttpHeaders.DATE);
                     dateSkew /= 1000;
-                    //case sensetive?
+                    //case sensitive?
                 } else if (finalAuthType == AuthenticationType.AWS_V4) {
                     dateSkew = parseIso8601(request.getHeader(
                             AwsHttpHeaders.DATE));
@@ -514,6 +516,8 @@ public class S3ProxyHandler {
                     AwsHttpHeaders.CONTENT_SHA256);
             if ("STREAMING-AWS4-HMAC-SHA256-PAYLOAD".equals(contentSha256)) {
                 is = new ChunkedInputStream(is);
+            } else if ("STREAMING-UNSIGNED-PAYLOAD-TRAILER".equals(contentSha256)) {
+                is = new ChunkedInputStream(is, request.getHeader(AwsHttpHeaders.TRAILER));
             }
         } else if (requestIdentity == null) {
             throw new S3Exception(S3ErrorCode.ACCESS_DENIED);
@@ -603,6 +607,9 @@ public class S3ProxyHandler {
                             contentSha256)) {
                         payload = new byte[0];
                         is = new ChunkedInputStream(is);
+                    } else if ("STREAMING-UNSIGNED-PAYLOAD-TRAILER".equals(contentSha256)) {
+                        payload = new byte[0];
+                        is = new ChunkedInputStream(is, request.getHeader(AwsHttpHeaders.TRAILER));
                     } else if ("UNSIGNED-PAYLOAD".equals(contentSha256)) {
                         payload = new byte[0];
                     } else {
@@ -1069,7 +1076,7 @@ public class S3ProxyHandler {
         addCorsResponseHeader(request, response);
     }
 
-    /** Map XML ACLs to a canned policy if an exact tranformation exists. */
+    /** Map XML ACLs to a canned policy if an exact transformation exists. */
     private static String mapXmlAclsToCannedPolicy(
             AccessControlPolicy policy) throws S3Exception {
         if (!policy.owner.id.equals(FAKE_OWNER_ID)) {
@@ -1987,6 +1994,54 @@ public class S3ProxyHandler {
             throw new S3Exception(S3ErrorCode.ENTITY_TOO_LARGE);
         }
 
+        // Handle If-Match and If-None-Match headers for PUT operations.
+        // Unlike GET operations which use GetOptions to pass these conditions
+        // to jclouds, PUT operations lack a PutOptions equivalent in jclouds.
+        // Therefore, we manually fetch the blob metadata and validate ETags.
+        // TODO: this is an emulated operation and therefore not atomic.
+        String ifMatch = request.getHeader(HttpHeaders.IF_MATCH);
+        String ifNoneMatch = request.getHeader(HttpHeaders.IF_NONE_MATCH);
+
+        if (ifMatch != null || ifNoneMatch != null) {
+            BlobMetadata metadata = blobStore.blobMetadata(containerName, blobName);
+            if (ifMatch != null) {
+                if (ifMatch.equals("*")) {
+                    if (metadata == null) {
+                        throw new S3Exception(S3ErrorCode.PRECONDITION_FAILED);
+                    }
+                } else {
+                    if (metadata == null) {
+                        throw new S3Exception(S3ErrorCode.NO_SUCH_KEY);
+                    }
+                    String eTag = metadata.getETag();
+                    if (eTag != null) {
+                        eTag = maybeQuoteETag(eTag);
+                        if (!equalsIgnoringSurroundingQuotes(ifMatch, eTag)) {
+                            throw new S3Exception(S3ErrorCode.PRECONDITION_FAILED);
+                        }
+                    } else {
+                        throw new S3Exception(S3ErrorCode.PRECONDITION_FAILED);
+                    }
+                }
+            }
+
+            if (ifNoneMatch != null) {
+                if (ifNoneMatch.equals("*")) {
+                    if (metadata != null) {
+                        throw new S3Exception(S3ErrorCode.PRECONDITION_FAILED);
+                    }
+                } else if (metadata != null) {
+                    String eTag = metadata.getETag();
+                    if (eTag != null) {
+                        eTag = maybeQuoteETag(eTag);
+                        if (equalsIgnoringSurroundingQuotes(ifNoneMatch, eTag)) {
+                            throw new S3Exception(S3ErrorCode.PRECONDITION_FAILED);
+                        }
+                    }
+                }
+            }
+        }
+
         BlobAccess access;
         String cannedAcl = request.getHeader(AwsHttpHeaders.ACL);
         if (cannedAcl == null || cannedAcl.equalsIgnoreCase("private")) {
@@ -2021,7 +2076,7 @@ public class S3ProxyHandler {
             builder.tier(StorageClass.valueOf(storageClass).toTier());
         }
 
-        addContentMetdataFromHttpRequest(builder, request);
+        addContentMetadataFromHttpRequest(builder, request);
         if (contentMD5 != null) {
             builder = builder.contentMD5(contentMD5);
         }
@@ -2055,37 +2110,35 @@ public class S3ProxyHandler {
         String signature = null;
         String algorithm = null;
         byte[] payload = null;
-        var multipartStream = MultipartInput.builder()
-                .setBoundary(boundary.getBytes(StandardCharsets.UTF_8))
-                .setInputStream(is)
-                .get();
-        boolean nextPart = multipartStream.skipPreamble();
-        while (nextPart) {
-            String header = multipartStream.readHeaders();
-            try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
-                multipartStream.readBodyData(baos);
-                if (isField(header, "acl")) {
-                    // TODO: acl
-                } else if (isField(header, "AWSAccessKeyId") ||
-                        isField(header, "X-Amz-Credential")) {
-                    identity = new String(baos.toByteArray());
-                } else if (isField(header, "Content-Type")) {
-                    contentType = new String(baos.toByteArray());
-                } else if (isField(header, "file")) {
-                    // TODO: buffers entire payload
-                    payload = baos.toByteArray();
-                } else if (isField(header, "key")) {
-                    blobName = new String(baos.toByteArray());
-                } else if (isField(header, "policy")) {
-                    policy = baos.toByteArray();
-                } else if (isField(header, "signature") ||
-                        isField(header, "X-Amz-Signature")) {
-                    signature = new String(baos.toByteArray());
-                } else if (isField(header, "X-Amz-Algorithm")) {
-                    algorithm = new String(baos.toByteArray());
+        var multipartStream = new MultiPartFormInputStream(is, boundaryHeader, null, null);
+        try {
+            for (var part : multipartStream.getParts()) {
+                try (var partIs = part.getInputStream()) {
+                    var header = part.getName();
+                    if (header.equalsIgnoreCase("acl")) {
+                        // TODO: acl
+                    } else if (header.equalsIgnoreCase("AWSAccessKeyId") ||
+                            header.equalsIgnoreCase("X-Amz-Credential")) {
+                        identity = CharStreams.toString(new InputStreamReader(partIs, StandardCharsets.UTF_8));
+                    } else if (header.equalsIgnoreCase("Content-Type")) {
+                        contentType = CharStreams.toString(new InputStreamReader(partIs, StandardCharsets.UTF_8));
+                    } else if (header.equalsIgnoreCase("file")) {
+                        // TODO: buffers entire payload
+                        payload = partIs.readAllBytes();
+                    } else if (header.equalsIgnoreCase("key")) {
+                        blobName = CharStreams.toString(new InputStreamReader(partIs, StandardCharsets.UTF_8));
+                    } else if (header.equalsIgnoreCase("policy")) {
+                        policy = partIs.readAllBytes();
+                    } else if (header.equalsIgnoreCase("signature") ||
+                            header.equalsIgnoreCase("X-Amz-Signature")) {
+                        signature = CharStreams.toString(new InputStreamReader(partIs, StandardCharsets.UTF_8));
+                    } else if (header.equalsIgnoreCase("X-Amz-Algorithm")) {
+                        algorithm = CharStreams.toString(new InputStreamReader(partIs, StandardCharsets.UTF_8));
+                    }
                 }
             }
-            nextPart = multipartStream.readBoundary();
+        } finally {
+            multipartStream.deleteParts();
         }
 
 
@@ -2211,7 +2264,7 @@ public class S3ProxyHandler {
         BlobBuilder.PayloadBlobBuilder builder = blobStore
                 .blobBuilder(blobName)
                 .payload(payload);
-        addContentMetdataFromHttpRequest(builder, request);
+        addContentMetadataFromHttpRequest(builder, request);
         builder.contentLength(payload.size());
 
         String storageClass = request.getHeader(AwsHttpHeaders.STORAGE_CLASS);
@@ -2988,7 +3041,7 @@ public class S3ProxyHandler {
         }
     }
 
-    // cannot call BlobStore.getContext().utils().date().iso8601DateFormatsince
+    // cannot call BlobStore.getContext().utils().date().iso8601DateFormat since
     // it has unwanted millisecond precision
     private static String formatDate(Date date) {
         var formatter = new SimpleDateFormat(
@@ -3058,7 +3111,7 @@ public class S3ProxyHandler {
         }
     }
 
-    private static void addContentMetdataFromHttpRequest(
+    private static void addContentMetadataFromHttpRequest(
             BlobBuilder.PayloadBlobBuilder builder,
             HttpServletRequest request) {
         var userMetadata = ImmutableMap.<String, String>builder();
@@ -3144,11 +3197,6 @@ public class S3ProxyHandler {
 
     private static boolean startsWithIgnoreCase(String string, String prefix) {
         return string.toLowerCase().startsWith(prefix.toLowerCase());
-    }
-
-    private static boolean isField(String string, String field) {
-        return startsWithIgnoreCase(string,
-                "Content-Disposition: form-data; name=\"" + field + "\"");
     }
 
     private static byte[] hmac(String algorithm, byte[] data, byte[] key) {

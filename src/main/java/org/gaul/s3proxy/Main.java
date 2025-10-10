@@ -307,6 +307,21 @@ public final class Main {
                             blobStore, fromChars, toChars);
         }
 
+        Map<String, Long> latencies = LatencyBlobStore.parseLatencies(properties);
+        Map<String, Long> speeds = LatencyBlobStore.parseSpeeds(properties);
+        if (!latencies.isEmpty() || !speeds.isEmpty()) {
+            System.err.println("Using latency storage backend");
+            blobStore = LatencyBlobStore.newLatencyBlobStore(blobStore, latencies, speeds);
+        }
+
+        String noCacheBlobStore = properties.getProperty(
+              S3ProxyConstants.PROPERTY_NO_CACHE_BLOBSTORE);
+        if  ("true".equalsIgnoreCase(noCacheBlobStore)) {
+            System.err.println("Using no-cache storage backend middleware");
+            blobStore = NoCacheBlobStore
+                    .newNoCacheBlobStore(blobStore);
+        }
+
         return blobStore;
     }
 
@@ -356,7 +371,10 @@ public final class Main {
             System.exit(1);
         }
 
-        if (provider.equals("filesystem") || provider.equals("transient")) {
+        if (provider.equals("filesystem") ||
+                provider.equals("filesystem-nio2") ||
+                provider.equals("transient") ||
+                provider.equals("transient-nio2")) {
             // local blobstores do not require credentials
             identity = Strings.nullToEmpty(identity);
             credential = Strings.nullToEmpty(credential);
@@ -403,21 +421,21 @@ public final class Main {
                 public Credentials get() {
                     AWSCredentialsProvider authChain = DefaultAWSCredentialsProviderChain.getInstance();
                     AWSCredentials newCreds = authChain.getCredentials();
-                    Credentials jcloudCred = null;
+                    Credentials jcloudsCred = null;
 
                     if (newCreds instanceof AWSSessionCredentials) {
-                        jcloudCred = SessionCredentials.builder()
+                        jcloudsCred = SessionCredentials.builder()
                                 .accessKeyId(newCreds.getAWSAccessKeyId())
                                 .secretAccessKey(newCreds.getAWSSecretKey())
                                 .sessionToken(((AWSSessionCredentials) newCreds).getSessionToken())
                                 .build();
                     } else {
-                        jcloudCred = new Credentials(
+                        jcloudsCred = new Credentials(
                                 newCreds.getAWSAccessKeyId(), newCreds.getAWSSecretKey()
                         );
                     }
 
-                    return jcloudCred;
+                    return jcloudsCred;
                 }
             };
             builder = builder.credentialsSupplier(credentialsSupplier);
