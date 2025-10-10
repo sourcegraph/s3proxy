@@ -109,11 +109,13 @@ S3Proxy can modify its behavior based on middlewares:
 * [bucket locator](https://github.com/gaul/s3proxy/wiki/Middleware-bucket-locator)
 * [eventual consistency modeling](https://github.com/gaul/s3proxy/wiki/Middleware---eventual-consistency)
 * [large object mocking](https://github.com/gaul/s3proxy/wiki/Middleware-large-object-mocking)
+* [latency](https://github.com/gaul/s3proxy/wiki/Middleware-latency)
 * [read-only](https://github.com/gaul/s3proxy/wiki/Middleware-read-only)
 * [regex rename blobs](https://github.com/gaul/s3proxy/wiki/Middleware-regex)
 * [sharded backend containers](https://github.com/gaul/s3proxy/wiki/Middleware-sharded-backend)
 * [storage class override](https://github.com/gaul/s3proxy/wiki/Middleware-storage-class-override)
 * [user metadata replacer](https://github.com/gaul/s3proxy/wiki/Middleware-user-metadata-replacer)
+* [no cache override](https://github.com/gaul/s3proxy/wiki/Middleware-no-cache)
 
 ## SSL Support
 
@@ -138,6 +140,7 @@ S3Proxy has broad compatibility with the S3 API, however, it does not support:
 
 S3Proxy emulates the following operations:
 
+* conditional PUT object when using If-Match or If-None-Match
 * copy multi-part objects, see [#76](https://github.com/gaul/s3proxy/issues/76)
 
 S3Proxy has basic CORS preflight and actual request/response handling. It can be configured within the properties
